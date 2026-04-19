@@ -26,6 +26,7 @@ if "config" not in st.session_state:
 # ============================================================
 client_pages = [
     st.Page("client_pages/home.py",            title="Home",                icon=":material/home:", default=True),
+    st.Page("client_pages/come_funziona.py",   title="Come funziona",       icon=":material/menu_book:"),
     st.Page("client_pages/wizard.py",          title="Wizard Enrichment",   icon=":material/auto_awesome:"),
     st.Page("client_pages/upload_feed.py",     title="Upload Feed",         icon=":material/upload_file:"),
     st.Page("client_pages/enrichment_ai.py",   title="Enrichment AI",       icon=":material/bolt:"),

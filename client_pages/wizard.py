@@ -41,76 +41,155 @@ def go(n):
 # ============================================================
 def render_stepper(current: int):
     steps_def = [
-        (1, "Progetto"),
-        (2, "Upload Feed"),
-        (3, "Enrichment AI"),
-        (4, "Scarica Catalogo"),
+        (1, "Progetto",        "Crea o riapri un progetto"),
+        (2, "Upload Feed",     "Carica XML/CSV/JSON"),
+        (3, "Enrichment AI",   "Claude arricchisce i prodotti"),
+        (4, "Scarica Catalogo","Export Google + Meta"),
     ]
-    # CSS specifico per i bottoni-step
+    total = len(steps_def)
+    pct = int(((current - 1) / max(total - 1, 1)) * 100)
+
     st.markdown("""
     <style>
-    div[data-testid="column"] .step-btn-active button {
-        background: #2F6FED !important;
-        color: white !important; border: 1px solid #2F6FED !important;
-        min-height: 70px !important; padding: 14px 12px !important;
-        font-weight: 600 !important; font-size: 0.85rem !important;
-        box-shadow: 0 4px 14px rgba(47, 111, 237, 0.25) !important;
-        border-radius: 12px !important;
-        white-space: normal !important; line-height: 1.3 !important;
+    .wiz-step-nav {
+        display:grid;
+        grid-template-columns:repeat(4, 1fr);
+        gap:6px;
+        position:relative;
+        margin:4px 0 8px;
     }
+    .wiz-step-track {
+        position:absolute;
+        left:12%;
+        right:12%;
+        top:22px;
+        height:3px;
+        background:#E5E7EB;
+        border-radius:999px;
+        z-index:0;
+    }
+    .wiz-step-fill {
+        position:absolute;
+        left:12%;
+        top:22px;
+        height:3px;
+        background:linear-gradient(90deg, #2F6FED, #8B5CF6);
+        border-radius:999px;
+        z-index:0;
+        transition:width 0.3s;
+    }
+    div[data-testid="column"] .step-btn-active button,
+    div[data-testid="column"] .step-btn-done button,
+    div[data-testid="column"] .step-btn-todo button {
+        border-radius:14px !important;
+        min-height:92px !important;
+        padding:12px 10px 10px !important;
+        font-weight:600 !important;
+        font-size:0.82rem !important;
+        white-space:normal !important;
+        line-height:1.28 !important;
+        letter-spacing:-0.005em !important;
+        transition:all 0.2s ease !important;
+    }
+    div[data-testid="column"] .step-btn-active button {
+        background:linear-gradient(180deg, #3D7DF3 0%, #2F6FED 100%) !important;
+        color:#FFFFFF !important;
+        border:1px solid #1A4BB5 !important;
+        box-shadow:0 8px 20px rgba(47,111,237,0.28), inset 0 1px 0 rgba(255,255,255,0.2) !important;
+    }
+    div[data-testid="column"] .step-btn-active button * { color:#FFFFFF !important; }
     div[data-testid="column"] .step-btn-done button {
-        background: #ECFDF5 !important;
-        color: #047857 !important; border: 1px solid #A7F3D0 !important;
-        min-height: 70px !important; padding: 14px 12px !important;
-        font-weight: 600 !important; font-size: 0.85rem !important;
-        border-radius: 12px !important;
-        white-space: normal !important; line-height: 1.3 !important;
+        background:#ECFDF5 !important;
+        color:#065F46 !important;
+        border:1px solid #A7F3D0 !important;
+    }
+    div[data-testid="column"] .step-btn-done button:hover {
+        background:#D1FAE5 !important;
+        border-color:#10B981 !important;
     }
     div[data-testid="column"] .step-btn-todo button {
-        background: #FFFFFF !important;
-        color: #6B7280 !important;
-        border: 1px dashed #D1D5DB !important;
-        min-height: 70px !important; padding: 14px 12px !important;
-        font-weight: 500 !important; font-size: 0.85rem !important;
-        border-radius: 12px !important;
-        white-space: normal !important; line-height: 1.3 !important;
+        background:#FFFFFF !important;
+        color:#9CA3AF !important;
+        border:1px dashed #D1D5DB !important;
+        font-weight:500 !important;
     }
     div[data-testid="column"] .step-btn-todo button:hover {
-        background: #EEF4FF !important;
-        color: #2F6FED !important;
-        border-color: #2F6FED !important; border-style: solid !important;
+        background:#EEF4FF !important;
+        border:1px dashed #2F6FED !important;
+        color:#2F6FED !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    cols = st.columns(len(steps_def))
-    for i, (num, label) in enumerate(steps_def):
+    # progress track (behind buttons)
+    st.markdown(
+        f"<div style='position:relative; height:0;'>"
+        f"<div class='wiz-step-track'></div>"
+        f"<div class='wiz-step-fill' style='width:calc({pct}% * 0.76);'></div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    cols = st.columns(total)
+    for i, (num, label, sub) in enumerate(steps_def):
         with cols[i]:
             if num < current:
-                cls = "step-btn-done"; status = "✓"
+                cls = "step-btn-done"; icon = "✓"
             elif num == current:
-                cls = "step-btn-active"; status = str(num)
+                cls = "step-btn-active"; icon = str(num)
             else:
-                cls = "step-btn-todo"; status = str(num)
+                cls = "step-btn-todo"; icon = str(num)
             st.markdown(f"<div class='{cls}'>", unsafe_allow_html=True)
-            label_btn = f"{status}  ·  {label}"
+            label_btn = f"{icon}\u2003{label}\n{sub}"
             if st.button(label_btn, key=f"step_btn_{num}",
                           use_container_width=True,
-                          help=f"Vai allo step {num}: {label}"):
+                          help=f"Vai allo step {num}: {label} — {sub}"):
                 go(num)
             st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ============================================================
-# HEADER + PROJECT SWITCHER
+# HEADER HERO + PROJECT SWITCHER
 # ============================================================
+current_pname = get_project_name(st.session_state["session_id"])
+is_named_proj = bool(get_project_info(st.session_state["session_id"]))
+badge = current_pname if is_named_proj else "progetto senza nome"
+
+st.markdown(
+    f"""
+    <div style='background:linear-gradient(135deg, #EEF4FF 0%, #FAFAFB 100%);
+                border:1px solid #DCE7FE; border-radius:20px; padding:28px 32px;
+                margin-bottom:20px; position:relative; overflow:hidden;'>
+        <div style='position:absolute; right:-40px; top:-40px; width:220px; height:220px;
+                    background:radial-gradient(circle, rgba(47,111,237,0.10), transparent 60%);
+                    pointer-events:none;'></div>
+        <div style='display:flex; align-items:flex-start; justify-content:space-between;
+                    gap:24px; flex-wrap:wrap; position:relative; z-index:1;'>
+            <div>
+                <div style='display:inline-block; background:#2F6FED; color:#FFFFFF;
+                            font-size:0.68rem; letter-spacing:0.14em; text-transform:uppercase;
+                            font-weight:700; padding:4px 10px; border-radius:999px;
+                            margin-bottom:10px;'>
+                    Wizard · 4 step
+                </div>
+                <div style='font-size:1.8rem; font-weight:800; color:#0A0A0F;
+                            letter-spacing:-0.025em; line-height:1.1; margin-bottom:6px;'>
+                    Data Enrichment
+                </div>
+                <div style='color:#4B5563; font-size:0.88rem;'>
+                    Progetto attivo · <b style='color:#0A0A0F;'>{badge}</b>
+                    <span style='color:#9CA3AF;'> · salvataggio automatico</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 hc1, hc2 = st.columns([3, 2])
 with hc1:
-    st.markdown("# Wizard Data Enrichment")
-    current_pname = get_project_name(st.session_state["session_id"])
-    is_named_proj = bool(get_project_info(st.session_state["session_id"]))
-    badge = current_pname if is_named_proj else "(progetto senza nome)"
-    st.caption(f"Progetto attivo · **{badge}** · Salvataggio automatico")
+    pass
 
 with hc2:
     # Project switcher inline — selectbox + 'cambia/nuovo'

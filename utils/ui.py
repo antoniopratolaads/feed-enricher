@@ -234,20 +234,40 @@ p, .stMarkdown { color: var(--text-primary); line-height: 1.6; }
     box-shadow: var(--shadow-sm) !important;
 }
 
-/* Primary buttons */
-button[kind="primary"], .stButton > button[kind="primary"] {
+/* Primary buttons — make sure ALL inner text is white (override any cascaded color) */
+button[kind="primary"], .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
     background: var(--blue-500) !important;
-    color: white !important;
-    border: 1px solid var(--blue-500) !important;
+    background-image: linear-gradient(180deg, #3D7DF3 0%, #2F6FED 100%) !important;
+    color: #FFFFFF !important;
+    border: 1px solid var(--blue-600) !important;
     font-weight: 600 !important;
-    box-shadow: var(--shadow-blue) !important;
+    box-shadow: var(--shadow-blue), inset 0 1px 0 rgba(255,255,255,0.15) !important;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.08);
+}
+button[kind="primary"] *,
+button[kind="primary"] p,
+button[kind="primary"] div,
+button[kind="primary"] span,
+button[kind="primary"] strong,
+.stButton > button[kind="primary"] * {
+    color: #FFFFFF !important;
 }
 button[kind="primary"]:hover {
-    background: var(--blue-600) !important;
-    border-color: var(--blue-600) !important;
-    color: white !important;
-    box-shadow: 0 6px 18px rgba(47, 111, 237, 0.30) !important;
+    background-image: linear-gradient(180deg, #3070F0 0%, #2160DC 100%) !important;
+    border-color: #1A4BB5 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 8px 22px rgba(47, 111, 237, 0.35), inset 0 1px 0 rgba(255,255,255,0.2) !important;
     transform: translateY(-1px);
+}
+button[kind="primary"]:active {
+    transform: translateY(0);
+    background-image: linear-gradient(180deg, #2160DC 0%, #1A4BB5 100%) !important;
+    box-shadow: 0 2px 6px rgba(47, 111, 237, 0.25), inset 0 2px 4px rgba(0,0,0,0.12) !important;
+}
+button[kind="primary"]:focus:not(:focus-visible) { outline: none; }
+button[kind="primary"]:focus-visible {
+    outline: 3px solid rgba(47, 111, 237, 0.35) !important;
+    outline-offset: 2px;
 }
 
 /* ============================================================

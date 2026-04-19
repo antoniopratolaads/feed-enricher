@@ -1,4 +1,4 @@
-"""Home Cliente: hero + recap requisiti + entry point."""
+"""Home Cliente: hero moderno + action cards + status progetto."""
 import streamlit as st
 import pandas as pd
 
@@ -26,95 +26,263 @@ onboarding_card()
 api_key_banner()
 
 # ============================================================
-# HERO
+# HERO — gradient blue + intro
 # ============================================================
-st.markdown("""
-<div class='hero-card'>
-    <h2>Feed Enricher Pro</h2>
-    <p>Carica il tuo feed prodotto, l'AI lo arricchisce con best practice settoriali, scarichi il catalogo ottimizzato per Google e Meta. <br>Pronto in 5 minuti.</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# RECAP REQUISITI — checklist
-# ============================================================
-df_loaded = st.session_state.get("feed_df") is not None
-api_ok = bool(cfg.get("anthropic_api_key"))
-project_named = bool(get_project_info(st.session_state["session_id"]))
-
-st.markdown("### Cosa serve per il Data Enrichment")
-
-c1, c2 = st.columns([2, 1])
-with c1:
-    items = [
-        ("Feed prodotto in XML / CSV / TSV / JSON / Excel",
-         "Il catalogo da caricare (anche da URL)", df_loaded),
-        ("API Key di Claude (Anthropic)",
-         "Per la generazione AI dei testi · Configurabile in Settings", api_ok),
-        ("Settore merceologico",
-         "L'AI applica best practice (abbigliamento, condizionatori, cosmesi)", True),
-        ("Tempo stimato ~5 minuti",
-         "Setup 1 min · Upload 30s · Enrichment 2-4 min su 50 prodotti", True),
-    ]
-    for title, desc, ok in items:
-        icon = "●" if ok else "○"
-        icon_color = "#10B981" if ok else "#D1D5DB"
-        border_color = "#A7F3D0" if ok else "#E5E7EB"
-        st.markdown(
-            f"<div style='background:#FFFFFF; border:1px solid {border_color}; "
-            f"border-left:3px solid {icon_color}; "
-            f"padding:14px 18px; border-radius:12px; margin-bottom:8px; "
-            f"box-shadow:0 1px 2px rgba(10,10,15,0.04);'>"
-            f"<div style='display:flex;align-items:center;gap:10px;'>"
-            f"<span style='color:{icon_color};font-size:14px;'>{icon}</span>"
-            f"<b style='color:#0A0A0F;font-size:0.92rem;'>{title}</b></div>"
-            f"<span style='color:#6B7280; font-size:0.82rem; margin-left:24px;'>{desc}</span>"
-            f"</div>", unsafe_allow_html=True
-        )
-
-with c2:
-    st.markdown("""
-    <div class='preview-card' style='border-left:4px solid #10B981;'>
-    <h4 style='margin:0 0 10px;'>Cosa ottieni</h4>
-    <ul style='line-height:1.9; opacity:0.9; padding-left:18px;'>
-        <li>Titoli ottimizzati Google + Meta</li>
-        <li>Descrizioni arricchite</li>
-        <li>Attributi popolati (colore, taglia, materiale...)</li>
-        <li>Categoria Google taxonomy</li>
-        <li>Bundle ZIP pronto da caricare</li>
-    </ul>
+st.markdown(
+    """
+    <div style='background:linear-gradient(135deg, #2F6FED 0%, #1A4BB5 100%);
+                border-radius:24px; padding:44px 48px; color:#FFFFFF;
+                margin-bottom:28px; box-shadow:0 24px 52px rgba(47,111,237,0.22);
+                position:relative; overflow:hidden;'>
+        <div style='position:absolute; top:-80px; right:-60px; width:380px; height:380px;
+                    background:radial-gradient(circle, rgba(255,255,255,0.14), transparent 60%);
+                    pointer-events:none;'></div>
+        <div style='position:absolute; bottom:-120px; left:-80px; width:340px; height:340px;
+                    background:radial-gradient(circle, rgba(255,255,255,0.08), transparent 70%);
+                    pointer-events:none;'></div>
+        <div style='position:relative; z-index:1;'>
+            <div style='display:inline-block; background:rgba(255,255,255,0.16);
+                        border:1px solid rgba(255,255,255,0.22); color:#FFFFFF;
+                        font-size:0.72rem; letter-spacing:0.15em; text-transform:uppercase;
+                        font-weight:700; padding:5px 12px; border-radius:999px; margin-bottom:16px;'>
+                AI · Feed optimization
+            </div>
+            <div style='font-size:2.75rem; font-weight:800; letter-spacing:-0.035em;
+                        line-height:1.05; margin-bottom:14px;'>
+                Feed Enricher Pro
+            </div>
+            <div style='font-size:1.1rem; opacity:0.92; max-width:620px; line-height:1.55;'>
+                Carica il feed prodotto, Claude lo arricchisce con best practice settoriali,
+                scarichi il catalogo ottimizzato per Google Merchant Center + Meta Catalog.
+                <b style='color:#FFFFFF;'>Pronto in 5 minuti.</b>
+            </div>
+        </div>
     </div>
-    """, unsafe_allow_html=True)
-
-st.divider()
+    """,
+    unsafe_allow_html=True,
+)
 
 # ============================================================
-# CTA — PRIMARI
+# ACTION CARDS — 3 CTA modernissime
 # ============================================================
-st.markdown("### Inizia")
-b1, b2, b3 = st.columns(3)
-with b1:
-    if st.button("Avvia Wizard Enrichment →", type="primary", use_container_width=True,
-                 help="Flusso guidato in 4 step. Consigliato."):
+df = current_df()
+df_loaded = df is not None
+api_ok = bool(cfg.get("anthropic_api_key"))
+
+# Clickable card effect: bigger button on top, rich card below
+st.markdown(
+    """
+    <style>
+    .home-action-card {
+        background:#FFFFFF;
+        border:1px solid #E5E7EB;
+        border-radius:18px;
+        padding:24px 24px 20px;
+        height:100%;
+        transition:all 0.2s ease;
+        position:relative;
+        overflow:hidden;
+        min-height:230px;
+        display:flex; flex-direction:column; gap:12px;
+    }
+    .home-action-card::before {
+        content:"";
+        position:absolute; top:0; left:0; right:0; height:3px;
+        background:linear-gradient(90deg, #2F6FED, #8B5CF6);
+        opacity:0.9;
+    }
+    .home-action-card.muted::before {
+        background:linear-gradient(90deg, #D1D5DB, #9CA3AF);
+    }
+    .home-action-card:hover {
+        transform:translateY(-2px);
+        box-shadow:0 12px 28px rgba(10,10,15,0.08);
+        border-color:#DCE7FE;
+    }
+    .home-action-icon {
+        width:48px; height:48px; border-radius:14px;
+        display:flex; align-items:center; justify-content:center;
+        font-size:1.5rem; color:#FFFFFF;
+        background:linear-gradient(135deg, #2F6FED, #8B5CF6);
+        box-shadow:0 6px 16px rgba(47,111,237,0.25);
+        flex-shrink:0;
+    }
+    .home-action-icon.green {
+        background:linear-gradient(135deg, #10B981, #059669);
+        box-shadow:0 6px 16px rgba(16,185,129,0.25);
+    }
+    .home-action-icon.purple {
+        background:linear-gradient(135deg, #8B5CF6, #6D28D9);
+        box-shadow:0 6px 16px rgba(139,92,246,0.25);
+    }
+    .home-action-title {
+        font-size:1.1rem; font-weight:700; color:#0A0A0F;
+        letter-spacing:-0.015em; line-height:1.25;
+    }
+    .home-action-desc {
+        font-size:0.85rem; color:#6B7280; line-height:1.55;
+        flex-grow:1;
+    }
+    .home-action-meta {
+        display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;
+    }
+    .home-action-chip {
+        font-size:0.7rem; color:#4B5563;
+        background:#F4F5F7; border:1px solid #E5E7EB;
+        padding:3px 8px; border-radius:999px; font-weight:500;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+col_a, col_b, col_c = st.columns(3, gap="medium")
+
+with col_a:
+    st.markdown(
+        """
+        <div class='home-action-card'>
+            <div class='home-action-icon'>✦</div>
+            <div class='home-action-title'>Avvia Wizard Enrichment</div>
+            <div class='home-action-desc'>
+                Flusso guidato in 4 step: progetto → upload feed → AI enrichment → scarica catalogo.
+                Salvataggio automatico, puoi riprendere in ogni momento.
+            </div>
+            <div class='home-action-meta'>
+                <span class='home-action-chip'>⏱ ~5 min</span>
+                <span class='home-action-chip'>Consigliato</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Inizia ora →", type="primary", use_container_width=True, key="_cta_wizard"):
         st.switch_page("client_pages/wizard.py")
-with b2:
-    if st.button("Carica demo (500 prodotti)", use_container_width=True,
-                 help="Dataset finto realistico per esplorare la app"):
+
+with col_b:
+    st.markdown(
+        """
+        <div class='home-action-card'>
+            <div class='home-action-icon green'>◉</div>
+            <div class='home-action-title'>Prova con dati demo</div>
+            <div class='home-action-desc'>
+                Dataset finto realistico con 500 prodotti, performance GAds simulate,
+                Shopify con distribuzione Pareto. Zero setup.
+            </div>
+            <div class='home-action-meta'>
+                <span class='home-action-chip'>500 prodotti</span>
+                <span class='home-action-chip'>No API key</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Carica demo", use_container_width=True, key="_cta_demo"):
         with st.spinner("Genero dati realistici..."):
             load_demo_into_session(st.session_state, 500)
         log_event(st.session_state["session_id"], "demo_loaded", {"n": 500})
         save_snapshot(st.session_state["session_id"], st.session_state)
-        st.success("Demo caricata!")
+        st.success("Demo caricata · 500 prodotti pronti.")
         st.rerun()
-with b3:
-    if st.button("Apri Labelizer ↗", use_container_width=True,
-                 help="Sezione avanzata per custom_label"):
-        st.switch_page("labelizer_pages/hub.py")
+
+with col_c:
+    st.markdown(
+        """
+        <div class='home-action-card'>
+            <div class='home-action-icon purple'>◆</div>
+            <div class='home-action-title'>Come funziona</div>
+            <div class='home-action-desc'>
+                Guida completa step-by-step. Setup, pipeline, feature avanzate,
+                export Google + Meta, FAQ. Perfetto per il primo avvio.
+            </div>
+            <div class='home-action-meta'>
+                <span class='home-action-chip'>Docs in-app</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Leggi la guida", use_container_width=True, key="_cta_guide"):
+        st.switch_page("client_pages/come_funziona.py")
+
+st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+
+# ============================================================
+# CHECKLIST REQUISITI — più compatta
+# ============================================================
+project_named = bool(get_project_info(st.session_state["session_id"]))
+
+col_left, col_right = st.columns([3, 2], gap="large")
+
+with col_left:
+    st.markdown("### Checklist setup")
+    items = [
+        ("Feed prodotto caricato", df_loaded,
+         "XML · CSV · TSV · JSON · Excel · da URL o file", "client_pages/upload_feed.py"),
+        ("API Key Claude configurata", api_ok,
+         "Per la generazione AI. Salvata solo in locale.", "client_pages/settings.py"),
+        ("Progetto salvato", project_named,
+         "Dai un nome al progetto per riaprirlo quando vuoi.", "client_pages/progetti.py"),
+    ]
+    for title, ok, desc, target in items:
+        icon = "●" if ok else "○"
+        icon_color = "#10B981" if ok else "#D1D5DB"
+        state_label = "Completato" if ok else "Da fare"
+        state_bg = "#ECFDF5" if ok else "#F4F5F7"
+        state_color = "#047857" if ok else "#6B7280"
+        st.markdown(
+            f"""
+            <div style='background:#FFFFFF; border:1px solid #E5E7EB;
+                        border-left:3px solid {icon_color};
+                        padding:14px 18px; border-radius:12px; margin-bottom:10px;
+                        display:flex; align-items:center; justify-content:space-between; gap:14px;
+                        box-shadow:0 1px 2px rgba(10,10,15,0.04);'>
+                <div style='flex:1;'>
+                    <div style='display:flex; align-items:center; gap:10px;'>
+                        <span style='color:{icon_color};font-size:15px;'>{icon}</span>
+                        <b style='color:#0A0A0F; font-size:0.94rem;'>{title}</b>
+                    </div>
+                    <div style='color:#6B7280; font-size:0.82rem; margin-left:24px; margin-top:2px;'>
+                        {desc}
+                    </div>
+                </div>
+                <div style='background:{state_bg}; color:{state_color}; font-size:0.72rem;
+                            font-weight:600; padding:4px 10px; border-radius:999px;
+                            text-transform:uppercase; letter-spacing:0.04em;'>
+                    {state_label}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+with col_right:
+    st.markdown("### Cosa ottieni")
+    st.markdown(
+        """
+        <div style='background:linear-gradient(180deg, #FAFAFB 0%, #FFFFFF 100%);
+                    border:1px solid #E5E7EB; border-left:4px solid #10B981;
+                    border-radius:14px; padding:20px 22px;
+                    box-shadow:0 1px 2px rgba(10,10,15,0.04);'>
+            <div style='font-weight:700; color:#0A0A0F; margin-bottom:10px; font-size:0.95rem;'>
+                Deliverables
+            </div>
+            <ul style='margin:0; padding-left:18px; line-height:2; color:#4B5563; font-size:0.88rem;'>
+                <li>Titoli ottimizzati <b>Google + Meta</b></li>
+                <li>Descrizioni arricchite settoriali</li>
+                <li>Attributi popolati (colore, taglia, materiale)</li>
+                <li>Categoria <b>Google taxonomy</b></li>
+                <li>Custom label performance / margine</li>
+                <li>Bundle ZIP pronto da caricare</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ============================================================
 # SE C'E' GIA' UN PROGETTO IN CORSO
 # ============================================================
-df = current_df()
 if df is not None:
     st.divider()
     pname = get_project_name(st.session_state["session_id"])
@@ -122,14 +290,14 @@ if df is not None:
     c = st.columns(4)
     c[0].metric("Prodotti", f"{len(df):,}")
     c[1].metric("Brand", df["brand"].nunique() if "brand" in df.columns else "—")
-    enriched_done = (df.get("title", df.get("title", pd.Series())).astype(str).str.len().mean()
-                      > 70) if "title" in df.columns else False
-    c[2].metric("Enrichment", "✅ fatto" if enriched_done else "⚪ da fare")
+    enriched_done = (df.get("title", pd.Series()).astype(str).str.len().mean() > 70) \
+        if "title" in df.columns else False
+    c[2].metric("Enrichment", "✓ fatto" if enriched_done else "da fare")
     c[3].metric("Sessione", st.session_state["session_id"][-8:])
 
     col_a, col_b = st.columns(2)
-    if col_a.button("Continua nel wizard →", type="primary", use_container_width=True):
+    if col_a.button("Continua nel wizard →", type="primary", use_container_width=True,
+                    key="_cta_continue"):
         st.switch_page("client_pages/wizard.py")
-    if col_b.button("Gestisci progetti", use_container_width=True):
+    if col_b.button("Gestisci progetti", use_container_width=True, key="_cta_projects"):
         st.switch_page("client_pages/progetti.py")
-
