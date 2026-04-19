@@ -80,15 +80,42 @@ with tab1:
     st.markdown("#### Anthropic Claude")
     st.caption("Ottieni la chiave da [console.anthropic.com](https://console.anthropic.com/settings/keys) — formato `sk-ant-...`")
 
-    _ant_key = st.text_input(
-        "API Key Anthropic",
-        value=cfg["anthropic_api_key"],
-        type="password",
-        placeholder="sk-ant-api03-...",
-        key="ant_key",
-        help="Si salva automaticamente quando premi Invio o esci dal campo.",
-    )
+    key_col, status_col = st.columns([3, 1])
+    with key_col:
+        _ant_key = st.text_input(
+            "API Key Anthropic",
+            value=cfg["anthropic_api_key"],
+            type="password",
+            placeholder="sk-ant-api03-...",
+            key="ant_key",
+            help=(
+                "**Si salva automaticamente quando premi Invio o esci dal campo.**\n\n"
+                f"Percorso: `{CONFIG_FILE}` (permessi 600, solo owner).\n\n"
+                "La chiave persiste anche dopo chiusura browser / riavvio container "
+                "perché il file è montato su volume Docker. "
+                "Viene usata solo per chiamate ad api.anthropic.com."
+            ),
+        )
     _autosave("anthropic_api_key", _ant_key)
+    with status_col:
+        st.markdown("<div style='height:26px;'></div>", unsafe_allow_html=True)  # align
+        if cfg.get("anthropic_api_key") and CONFIG_FILE.exists():
+            preview = mask_key(cfg["anthropic_api_key"])
+            st.markdown(
+                f"<div style='background:#ECFDF5; border:1px solid #A7F3D0;"
+                f"border-radius:8px; padding:6px 10px; font-size:0.78rem; color:#065F46;'>"
+                f"<b>✓ Salvata su disco</b><br>"
+                f"<span style='color:#047857; font-family:monospace; font-size:0.72rem;'>{preview}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='background:#FEF3C7; border:1px solid #F59E0B;"
+                "border-radius:8px; padding:6px 10px; font-size:0.78rem; color:#92400E;'>"
+                "○ Non salvata</div>",
+                unsafe_allow_html=True,
+            )
 
     _ant_model = st.selectbox(
         "Modello",
@@ -121,15 +148,40 @@ with tab2:
     st.markdown("#### OpenAI")
     st.caption("Ottieni la chiave da [platform.openai.com/api-keys](https://platform.openai.com/api-keys) — formato `sk-...` o `sk-proj-...`")
 
-    _oai_key = st.text_input(
-        "API Key OpenAI",
-        value=cfg["openai_api_key"],
-        type="password",
-        placeholder="sk-proj-...",
-        key="oai_key",
-        help="Si salva automaticamente.",
-    )
+    key_col, status_col = st.columns([3, 1])
+    with key_col:
+        _oai_key = st.text_input(
+            "API Key OpenAI",
+            value=cfg["openai_api_key"],
+            type="password",
+            placeholder="sk-proj-...",
+            key="oai_key",
+            help=(
+                "**Si salva automaticamente.**\n\n"
+                f"Percorso: `{CONFIG_FILE}` (permessi 600).\n\n"
+                "La chiave persiste fra sessioni e riavvii container."
+            ),
+        )
     _autosave("openai_api_key", _oai_key)
+    with status_col:
+        st.markdown("<div style='height:26px;'></div>", unsafe_allow_html=True)
+        if cfg.get("openai_api_key") and CONFIG_FILE.exists():
+            preview = mask_key(cfg["openai_api_key"])
+            st.markdown(
+                f"<div style='background:#ECFDF5; border:1px solid #A7F3D0;"
+                f"border-radius:8px; padding:6px 10px; font-size:0.78rem; color:#065F46;'>"
+                f"<b>✓ Salvata su disco</b><br>"
+                f"<span style='color:#047857; font-family:monospace; font-size:0.72rem;'>{preview}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='background:#FEF3C7; border:1px solid #F59E0B;"
+                "border-radius:8px; padding:6px 10px; font-size:0.78rem; color:#92400E;'>"
+                "○ Non salvata</div>",
+                unsafe_allow_html=True,
+            )
 
     _oai_model = st.selectbox(
         "Modello",
@@ -156,15 +208,56 @@ with tab2:
 
 with tab3:
     st.markdown("#### Parametri di generazione")
+
     c1, c2, c3 = st.columns(3)
-    _autosave("max_tokens", c1.number_input("Max tokens per prodotto", 256, 4096,
-                                              int(cfg["max_tokens"]), 128))
-    _autosave("temperature", c2.slider("Temperature", 0.0, 1.0,
-                                        float(cfg["temperature"]), 0.05))
-    _autosave("max_workers", c3.slider("Parallelismo (worker)", 1, 20,
-                                        int(cfg["max_workers"])))
-    _autosave("default_limit", st.number_input("Limite default prodotti per enrichment",
-                                                 10, 10000, int(cfg["default_limit"]), 10))
+    _autosave("max_tokens", c1.number_input(
+        "Max tokens per prodotto", 256, 4096, int(cfg["max_tokens"]), 128,
+        help=(
+            "**Lunghezza massima della risposta AI per ogni prodotto.**\n\n"
+            "1 token ≈ 0.75 parole in italiano. 1024 token = ~750 parole.\n\n"
+            "- 512: titoli + descrizioni brevi\n"
+            "- 1024 (default): descrizioni medie + attributi completi\n"
+            "- 2048+: descrizioni molto lunghe o molti bullet\n\n"
+            "⚠️ Più alto = più costo. Se Claude tronca risposte alza questo valore."
+        ),
+    ))
+    _autosave("temperature", c2.slider(
+        "Temperature", 0.0, 1.0, float(cfg["temperature"]), 0.05,
+        help=(
+            "**Creatività del modello AI (0.0 = deterministico, 1.0 = creativo).**\n\n"
+            "Controlla la variabilità delle risposte per lo stesso input:\n"
+            "- **0.0-0.2**: risposte quasi identiche ad ogni run. Massima consistenza. "
+            "Usa per cataloghi dove titoli e descrizioni devono seguire formule rigide.\n"
+            "- **0.3-0.5** (consigliato): buon bilanciamento fra consistenza e naturalezza. "
+            "Default 0.4.\n"
+            "- **0.6-0.8**: linguaggio più vario, utile per copywriting emozionale o cataloghi "
+            "con prodotti molto simili che altrimenti suonerebbero ripetitivi.\n"
+            "- **0.9-1.0**: massima creatività, rischio di hallucinations o testi fuori-tono. "
+            "Sconsigliato per feed Google Merchant.\n\n"
+            "⚠️ Se noti titoli troppo simili fra loro, alza a 0.5-0.6. "
+            "Se Claude inventa dettagli, abbassa a 0.2-0.3."
+        ),
+    ))
+    _autosave("max_workers", c3.slider(
+        "Parallelismo (worker)", 1, 20, int(cfg["max_workers"]),
+        help=(
+            "**Numero di richieste AI lanciate in parallelo.**\n\n"
+            "Ogni 'worker' chiama Claude per un prodotto diverso contemporaneamente. "
+            "Moltiplica la velocità di enrichment MA aumenta il rischio di rate-limit sull'API.\n\n"
+            "- **1**: sequenziale, massima sicurezza, lento (1 prodotto per volta)\n"
+            "- **3-5** (consigliato): bilanciato per tier API standard Anthropic\n"
+            "- **10-15**: veloce, richiede tier API alto (Build/Scale)\n"
+            "- **20**: massimo, solo per account Enterprise senza rate limit\n\n"
+            "Esempio: 100 prodotti con parallelismo 5 = ~20 chiamate sequenziali "
+            "(100 ÷ 5), non 100. Se Claude genera in ~4s, totale ~80s invece di 400s.\n\n"
+            "⚠️ Se vedi errori '429 rate_limit_exceeded', abbassa a 3-5."
+        ),
+    ))
+    _autosave("default_limit", st.number_input(
+        "Limite default prodotti per enrichment",
+        10, 10000, int(cfg["default_limit"]), 10,
+        help="Valore preselezionato nel campo 'Limite prodotti' in Enrichment AI. Puoi sempre sovrascriverlo.",
+    ))
 
     st.markdown("#### Variabili d'ambiente (opzionali)")
     st.caption("Se imposti queste env vars all'avvio dell'app, sovrascrivono le chiavi salvate:")
