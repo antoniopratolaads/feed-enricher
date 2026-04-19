@@ -14,3 +14,4 @@ faker>=22.0.0
 rapidfuzz>=3.6.0
 pyyaml>=6.0.1
 pyarrow>=14.0.0
+pillow>=10.0.0

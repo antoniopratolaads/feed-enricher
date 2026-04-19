@@ -4,12 +4,13 @@ import pandas as pd
 import plotly.express as px
 
 from utils.state import init_state, current_df
-from utils.ui import apply_theme
+from utils.ui import apply_theme, empty_state
 from utils.catalog_optimizer import (
     build_google_feed, build_meta_feed, validate_feed, title_quality_check,
     GOOGLE_FIELDS,
 )
 from utils.exporter import to_excel_bytes, to_gmc_xml
+from utils.validation import quality_summary, find_duplicates, validate_gtins, validate_images
 
 init_state()
 apply_theme()
@@ -23,8 +24,66 @@ st.caption("Genera feed ottimizzati con best practice per Google Merchant Center
 
 df = current_df()
 if df is None:
-    st.warning("Carica prima un feed.")
+    empty_state(
+        icon="📦",
+        title="Nessun feed caricato",
+        description="Carica prima un feed prodotto. Il Catalog Optimizer userà enrichment + label "
+                    "per produrre export Google Merchant e Meta Catalog.",
+        cta_label="Vai a Upload Feed →",
+        cta_page="client_pages/upload_feed.py",
+        cta_key="_empty_upload_opt",
+    )
     st.stop()
+
+# ============================================================
+# QUALITY CHECKS — pre-export sanity
+# ============================================================
+with st.expander("🔎 Quality check catalogo (pre-export)", expanded=False):
+    qs = quality_summary(df)
+    qc = st.columns(5)
+    qc[0].metric("Prodotti totali", f"{qs.total_rows:,}")
+    qc[1].metric("GTIN validi", f"{qs.gtin.get('valid', 0):,}",
+                  delta=f"{qs.gtin.get('invalid', 0)} invalidi" if qs.gtin.get('invalid') else None,
+                  delta_color="inverse" if qs.gtin.get('invalid') else "normal")
+    qc[2].metric("Duplicati title+desc", qs.duplicates,
+                  delta_color="inverse" if qs.duplicates else "normal")
+    qc[3].metric("Titoli corti (<30ch)", qs.short_titles,
+                  delta_color="inverse" if qs.short_titles else "normal")
+    qc[4].metric("Description corte (<80ch)", qs.short_descriptions,
+                  delta_color="inverse" if qs.short_descriptions else "normal")
+
+    if qs.duplicates:
+        dups = find_duplicates(df, ("title", "description")).head(30)
+        st.markdown("**Duplicati rilevati** (primi 30 — raggruppati per `_dup_group`)")
+        st.dataframe(
+            dups[[c for c in ("id", "brand", "title", "description", "_dup_group") if c in dups.columns]],
+            use_container_width=True, height=240,
+        )
+
+    if qs.gtin.get('invalid'):
+        bad = df[df.get("gtin", "").astype(str).apply(
+            lambda x: bool(x.strip()) and len(x.strip().split('.')[0]) in (8, 12, 13, 14)
+        )].head(20) if "gtin" in df.columns else pd.DataFrame()
+
+    if st.button("🖼️ Verifica dimensioni immagini (primi 50)", key="_img_check",
+                  help="HEAD request per ogni URL immagine. Warning se <800×800px."):
+        if "image_link" not in df.columns:
+            st.warning("Nessuna colonna `image_link` nel feed.")
+        else:
+            with st.spinner("Verifica immagini..."):
+                issues = validate_images(df["image_link"].dropna().tolist(), limit=50)
+            if not issues:
+                st.success("Tutte le immagini OK (primi 50).")
+            else:
+                st.warning(f"{len(issues)} problemi rilevati")
+                st.dataframe(
+                    pd.DataFrame([{
+                        "url": i.url[:60] + "..." if len(i.url) > 60 else i.url,
+                        "motivo": i.reason,
+                        "width": i.width, "height": i.height,
+                    } for i in issues]),
+                    use_container_width=True, height=240,
+                )
 
 # ============================================================
 # CONFIG
