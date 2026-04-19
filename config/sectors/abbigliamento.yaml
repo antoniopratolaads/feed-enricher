@@ -1,0 +1,207 @@
+# Best practice ABBIGLIAMENTO (Apparel)
+# Sintetizza linee guida ufficiali Google Merchant Center + Meta Catalog
+# + best practice di settore per il vertical fashion/apparel.
+# Ogni regola è leggibile dall'AI in fase di enrichment per uniformare l'output.
+
+sector: abbigliamento
+display_name: Abbigliamento / Fashion / Apparel
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {tipo_prodotto} {gender} {colore} {taglia} {materiale}"
+  formula_examples:
+    - "Nike Air Max 90 Donna Bianco e Nero Pelle"
+    - "Levi's 501 Original Jeans Uomo Blu Denim Taglia 32"
+    - "Patagonia Down Sweater Hoody Donna Verde Militare M"
+  rules:
+    - "SEMPRE iniziare con il brand"
+    - "Includere genere (Uomo/Donna/Unisex/Bambino)"
+    - "Includere colore principale + materiale + taglia se disponibili"
+    - "Tra 70 e 150 caratteri (sweet spot Google = 90-130)"
+    - "Meta limite 200 caratteri"
+    - "NO emoji, NO maiuscole eccessive, NO esclamazioni"
+    - "NO 'Acquista ora', 'Spedizione gratis', 'In offerta' (vietato GMC)"
+    - "Usa terminologia di ricerca reale (es. 't-shirt' meglio di 'tee')"
+  forbidden_words:
+    - "acquista"
+    - "compra ora"
+    - "offerta"
+    - "saldo"
+    - "scontato"
+    - "promo"
+    - "novità"
+    - "\\u2728"
+    - "\\u2705"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cos'è il prodotto + per chi (genere/uso)"
+    - "Frase 2-3: materiali, vestibilità, dettagli costruttivi"
+    - "Frase 4: occasione d'uso / styling"
+    - "Frase 5 (opz.): cura del capo, sostenibilità"
+  length:
+    min_chars: 200
+    ideal_chars: 500
+    max_chars: 5000  # GMC limite
+  tone:
+    - "Descrittivo, NON promozionale"
+    - "Concreto: ' cotone organico 280gsm' meglio di 'tessuto premium'"
+    - "Evita superlativi vuoti ('migliore', 'unico', 'rivoluzionario')"
+  must_include:
+    - "Composizione tessuto/materiale"
+    - "Vestibilità (regular fit, slim, oversize)"
+    - "Cura del capo se rilevante (lavabile in lavatrice, lavaggio a secco)"
+
+# ============================================================
+# ATTRIBUTI OBBLIGATORI ABBIGLIAMENTO (GMC)
+# ============================================================
+required_attributes:
+  - name: gender
+    values: [male, female, unisex]
+    italian_synonyms:
+      male: [uomo, maschio, men, mens]
+      female: [donna, femmina, women, womens]
+      unisex: [unisex, all]
+
+  - name: age_group
+    values: [newborn, infant, toddler, kids, adult]
+    default_for_apparel: adult
+    italian_synonyms:
+      newborn: [neonato, 0-3 mesi]
+      infant: [infante, 3-12 mesi]
+      toddler: [bambino piccolo, 1-5 anni]
+      kids: [bambino, ragazzo, junior, 5-13 anni]
+      adult: [adulto, uomo, donna]
+
+  - name: color
+    rules:
+      - "Colore principale per primo (es. 'Bianco e Nero' non 'Nero/Bianco')"
+      - "Massimo 3 colori separati da '/'"
+      - "Italiano standard: bianco, nero, blu, rosso, verde, grigio, beige, rosa, giallo, marrone, viola, arancione"
+      - "Per multicolor scrivi 'Multicolor' invece di liste lunghe"
+
+  - name: size
+    rules:
+      - "Lettere standard: XS, S, M, L, XL, XXL, XXXL"
+      - "Numeriche: usa formato europeo per scarpe (38-46) e jeans (28-40)"
+      - "Bambino: età (3M, 6M, 12M, 2Y, 5Y) o taglia (74, 92, 110)"
+      - "Per Meta usa size_type [regular, petite, plus, big and tall, maternity]"
+
+  - name: size_system
+    default: "EU"
+    values: [US, UK, EU, DE, FR, JP, CN, IT, BR, MEX, AU]
+
+  - name: material
+    rules:
+      - "Materiale principale per primo + percentuale se disponibile"
+      - "Es: '95% cotone, 5% elastan'"
+      - "Per pelle specifica tipo: 'pelle bovina', 'pelle scamosciata'"
+
+  - name: pattern
+    common_values:
+      - tinta unita
+      - righe
+      - quadri
+      - floreale
+      - geometrico
+      - animalier
+      - pois
+      - camouflage
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY ABBIGLIAMENTO
+# ============================================================
+google_taxonomy:
+  root: "Apparel & Accessories > Clothing"
+  common_paths:
+    - "Apparel & Accessories > Clothing > Shirts & Tops"
+    - "Apparel & Accessories > Clothing > Pants"
+    - "Apparel & Accessories > Clothing > Jeans"
+    - "Apparel & Accessories > Clothing > Skirts"
+    - "Apparel & Accessories > Clothing > Dresses"
+    - "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets"
+    - "Apparel & Accessories > Clothing > Activewear"
+    - "Apparel & Accessories > Clothing > Underwear & Socks"
+    - "Apparel & Accessories > Clothing > Swimwear"
+    - "Apparel & Accessories > Shoes"
+    - "Apparel & Accessories > Handbags, Wallets & Cases > Handbags"
+    - "Apparel & Accessories > Jewelry"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Sfondo bianco o trasparente per main image (preferito GMC)"
+  - "Risoluzione minima 250x250, ideale 800x800"
+  - "Niente watermark, testo sovrapposto, loghi promozionali"
+  - "additional_image_link: prodotto indossato, dettagli, retro/lato"
+  - "Per varianti taglia/colore SEMPRE immagine specifica della variante"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    note: "Per abbigliamento branded l'EAN/UPC è quasi sempre disponibile"
+  mpn:
+    note: "Codice articolo del produttore. Obbligatorio se manca gtin"
+  item_group_id:
+    critical: true
+    note: "RAGGRUPPA varianti dello stesso modello (taglia/colore). Obbligatorio per Shopping campagne efficaci"
+
+# ============================================================
+# PREZZO E DISPONIBILITÀ
+# ============================================================
+pricing:
+  - "Sale_price obbligatorio se il prezzo mostrato è scontato (non puoi mettere lo scontato in 'price')"
+  - "Sale_price_effective_date per saldi temporanei"
+  - "Tax e shipping configurati a livello account"
+
+# ============================================================
+# CUSTOM LABELS (suggerite per fashion)
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "stagione (FW25, SS26, ALL_YEAR)"
+  custom_label_1: "fascia_prezzo (entry / mid / premium / luxury)"
+  custom_label_2: "performance (bestseller / steady / slow / new)"
+  custom_label_3: "stock_level (in_stock / low_stock / clearance)"
+  custom_label_4: "categoria_marketing (basics / statement / streetwear / formal)"
+
+# ============================================================
+# DIFFERENZE GOOGLE vs META
+# ============================================================
+platform_differences:
+  google:
+    title_max: 150
+    description_max: 5000
+    requires: [google_product_category, condition, gtin_or_mpn]
+    image_format: "JPEG/PNG/GIF, max 64MB"
+  meta:
+    title_max: 200
+    description_max: 9999
+    short_description_max: 200
+    requires: [condition, brand, fb_product_category]
+    extra_useful: [rich_text_description, video, applinks]
+    note: "Meta è più tollerante con i titoli lunghi e accetta HTML in description"
+
+# ============================================================
+# TONO DI VOCE PER L'AI
+# ============================================================
+ai_voice:
+  do:
+    - "Linguaggio chiaro e specifico"
+    - "Usa termini tecnici corretti (denim 12oz, jersey, popeline, twill)"
+    - "Mostra benefici concreti (vestibilità comoda, traspirante, antipiega)"
+    - "Adatta il tono al brand: streetwear vs luxury vs sport"
+  dont:
+    - "NO claim non verificabili ('il migliore della categoria')"
+    - "NO claim medici/salute non documentati"
+    - "NO confronti diretti con competitor"
+    - "NO promesse di risultati ('ti farà sembrare più magro')"

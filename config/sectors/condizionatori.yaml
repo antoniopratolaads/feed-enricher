@@ -1,0 +1,247 @@
+# Best practice CONDIZIONATORI / CLIMATIZZAZIONE
+# Sintetizza linee guida ufficiali Google Merchant Center + Meta Catalog
+# + best practice settoriali per HVAC residenziale e commerciale.
+
+sector: condizionatori
+display_name: Condizionatori / Climatizzazione / HVAC
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {linea/modello} {tipo} {btu} {classe_energetica} {tecnologia}"
+  formula_examples:
+    - "Daikin Perfera FTXM35R Climatizzatore Inverter 12000 BTU A+++ Wi-Fi R-32"
+    - "Mitsubishi MSZ-LN35VG Kirigamine Style 12000 BTU A+++/A+++ Wi-Fi Inverter"
+    - "Samsung Wind-Free Avant 9000 BTU A++ Wi-Fi R-32 Pompa di Calore"
+    - "Olimpia Splendid Dolceclima Air Pro 14 Pinguino Portatile 14000 BTU A"
+    - "Hisense Energy Pro Plus 18000 BTU A+++ Wi-Fi Inverter Multisplit Esterna"
+  rules:
+    - "SEMPRE iniziare con il brand"
+    - "Includere SEMPRE: tipo (split/multisplit/portatile/canalizzato), BTU, classe energetica"
+    - "Specificare se Inverter, Pompa di calore, Wi-Fi quando presenti"
+    - "Indicare gas refrigerante (R-32 preferito, R-410A legacy)"
+    - "Tra 70 e 150 caratteri per Google, fino a 200 per Meta"
+    - "NO 'risparmia', 'eco', 'green' generici - usa termini tecnici certificabili"
+    - "NO 'pronta consegna', 'spedizione gratuita' (vietato GMC)"
+    - "Formato BTU: '9000 BTU' (con spazio), non '9000BTU' né '9k'"
+    - "Formato classe energetica: 'A+++', 'A++/A+' (cooling/heating)"
+  forbidden_words:
+    - "acquista"
+    - "compra ora"
+    - "offerta"
+    - "saldo"
+    - "scontato"
+    - "promo"
+    - "miglior prezzo"
+    - "garanzia leader"
+    - "spedizione gratuita"
+    - "pronta consegna"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è (tipo, capacità BTU) e per quale ambiente (m²/volume)"
+    - "Frase 2: tecnologia chiave (Inverter DC, pompa di calore, deumidificazione)"
+    - "Frase 3: efficienza energetica (SEER, SCOP, classe A+++)"
+    - "Frase 4: comfort acustico (dB unità interna), connettività (Wi-Fi, app, voice control)"
+    - "Frase 5: gas refrigerante e impatto ambientale (R-32 GWP 675 vs R-410A GWP 2088)"
+    - "Frase 6 (opz.): contenuto della confezione (split interno+esterno, telecomando, kit installazione)"
+  length:
+    min_chars: 300
+    ideal_chars: 800
+    max_chars: 5000
+  tone:
+    - "Tecnico ma accessibile, NON promozionale"
+    - "Numerico e verificabile: '3.4 kW' meglio di 'alta potenza'"
+    - "Cita normative quando rilevante (Ecodesign 2018, ErP)"
+    - "Evita superlativi vuoti ('rivoluzionario', 'unico al mondo')"
+  must_include:
+    - "BTU + kW di potenza in raffreddamento"
+    - "Classe energetica COOLING e HEATING (se pompa di calore)"
+    - "SEER (Seasonal Energy Efficiency Ratio) e SCOP (Seasonal Coefficient of Performance)"
+    - "Tipo gas refrigerante"
+    - "Livello sonoro minimo (dB) unità interna"
+    - "Superficie consigliata in m²"
+
+# ============================================================
+# ATTRIBUTI OBBLIGATORI
+# ============================================================
+required_attributes:
+  - name: tipo_climatizzatore
+    values:
+      - mono split
+      - dual split
+      - trial split
+      - quadri split
+      - penta split
+      - portatile
+      - canalizzato
+      - cassetta
+      - console pavimento
+      - VRF/VRV
+    rules:
+      - "Specifica numero di unità interne per multisplit (es. 'dual split = 2 interne + 1 esterna')"
+
+  - name: btu
+    common_values: [5000, 7000, 9000, 12000, 14000, 18000, 21000, 24000, 30000, 36000]
+    rules:
+      - "Esprimi in BTU/h. Conversione: 9000 BTU ≈ 2.6 kW, 12000 BTU ≈ 3.5 kW, 18000 BTU ≈ 5.3 kW"
+      - "Per multisplit indica BTU TOTALI esterna + BTU singole interne"
+
+  - name: classe_energetica_cooling
+    values: [A+++, A++, A+, A, B, C, D, E, F, G]
+    note: "Obbligatoria etichetta energetica UE"
+
+  - name: classe_energetica_heating
+    values: [A+++, A++, A+, A, B, C, D, E, F, G]
+    note: "Solo se pompa di calore (non solo cooling)"
+
+  - name: seer
+    rules:
+      - "Seasonal Energy Efficiency Ratio (cooling). Valori tipici: A+++ ≥ 8.5, A++ ≥ 7.0, A+ ≥ 6.1"
+
+  - name: scop
+    rules:
+      - "Seasonal Coefficient of Performance (heating). Valori tipici: A+++ ≥ 5.1, A++ ≥ 4.6, A+ ≥ 4.0"
+
+  - name: gas_refrigerante
+    values: [R-32, R-410A, R-290, R-454B, R-22]
+    rules:
+      - "R-32 è lo standard moderno (GWP 675)"
+      - "R-410A in dismissione (GWP 2088)"
+      - "R-290 propano - bassissimo GWP ma infiammabile"
+      - "R-22 vietato in UE per nuovi installazioni dal 2010"
+
+  - name: livello_sonoro_db
+    rules:
+      - "Indica il MINIMO unità interna (modo notte/silenzioso)"
+      - "Range tipico: 19-25 dB (ottimo) · 26-32 dB (buono) · 33+ dB (rumoroso)"
+
+  - name: superficie_consigliata_mq
+    rules:
+      - "Stima rapida: 100 BTU per m² in ambiente standard (h 2.7m, isolamento medio)"
+      - "9000 BTU → 20-30 m² · 12000 BTU → 30-45 m² · 18000 BTU → 45-65 m²"
+
+  - name: tecnologie
+    common_values:
+      - Inverter DC
+      - Pompa di calore
+      - Wi-Fi integrato
+      - controllo vocale (Alexa/Google Home)
+      - filtri HEPA
+      - filtri ai carboni attivi
+      - ionizzatore
+      - deumidificazione attiva
+      - autopulizia
+      - sensore presenza
+      - flusso d'aria 3D
+
+  - name: alimentazione_v
+    values: [220-240V, 380-400V trifase]
+    note: "Trifase solo per potenze >18000 BTU industriali"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Home & Garden > Household Appliances > Climate Control Appliances"
+  common_paths:
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Air Conditioners > Portable Air Conditioners"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Air Conditioners > Split System Air Conditioners"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Air Conditioners > Window Air Conditioners"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Heaters > Heat Pumps"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Dehumidifiers"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Air Conditioner Accessories"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Thermostats"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Sfondo bianco per main image (preferito GMC)"
+  - "Mostrare AMBEDUE le unità per split (interna + esterna)"
+  - "Risoluzione minima 800x800 (clima è prodotto tecnico, dettaglio importante)"
+  - "additional_image_link: etichetta energetica UE, telecomando, vista laterale"
+  - "Per multi-split: schema configurazione con numero unità interne"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    note: "EAN-13 standard. Per multisplit, GTIN diverso per esterna e interne"
+  mpn:
+    critical: true
+    note: "Codice modello produttore. ESSENZIALE per HVAC (es. 'FTXM35R', 'MSZ-LN35VG')"
+  item_group_id:
+    note: "Per varianti taglia BTU dello stesso modello (es. Daikin Perfera 9k/12k/18k)"
+
+# ============================================================
+# PREZZO E DISPONIBILITÀ
+# ============================================================
+pricing:
+  - "Prezzo SOLO macchina (senza installazione) salvo specificato"
+  - "Se include installazione: aggiungi 'installazione inclusa' nel title"
+  - "Bonus fiscali (Bonus Casa 50%, Ecobonus 65%) NON nel feed - ENERGY label si"
+  - "Per multisplit indica chiaramente cosa contiene il prezzo (esterna+N interne)"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE PER CLIMA
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "stagione_picco (primavera_estate / autunno_inverno / annuale)"
+  custom_label_1: "fascia_btu (small_5-9k / medium_12-14k / large_18-24k / xl_30k+)"
+  custom_label_2: "tipo_installazione (fai_da_te / installatore / professionale)"
+  custom_label_3: "classe_efficienza (A_plus_plus_plus / A_plus_plus / A_plus / A_e_inferiore)"
+  custom_label_4: "tecnologia_premium (smart_wifi / standard / inverter_only / portatile)"
+
+# ============================================================
+# DIFFERENZE GOOGLE vs META
+# ============================================================
+platform_differences:
+  google:
+    title_max: 150
+    description_max: 5000
+    requires: [google_product_category, condition, gtin_or_mpn, energy_efficiency_class]
+    eu_specific: "energy_efficiency_class, min_energy_efficiency_class, max_energy_efficiency_class"
+    image_format: "JPEG/PNG/GIF, max 64MB"
+  meta:
+    title_max: 200
+    description_max: 9999
+    short_description_max: 200
+    requires: [condition, brand, fb_product_category]
+    extra_useful: [rich_text_description, video, applinks]
+    note: "Meta accetta video di installazione - molto utile per HVAC"
+
+# ============================================================
+# COMPLIANCE & NORMATIVE
+# ============================================================
+compliance:
+  - "Etichetta energetica UE 2017/1369 OBBLIGATORIA per vendita online"
+  - "Ecodesign Directive 2009/125/CE per prodotti consumo energetico"
+  - "Regolamento F-Gas (517/2014) - dichiarazione gas refrigerante"
+  - "RAEE (rifiuti elettronici) - eco-contributo da specificare"
+  - "Patentino F-Gas obbligatorio per installatore (Reg. CE 303/2008)"
+
+# ============================================================
+# TONO DI VOCE PER L'AI
+# ============================================================
+ai_voice:
+  do:
+    - "Linguaggio tecnico ma accessibile"
+    - "Cita SEMPRE numeri: BTU, kW, dB, SEER, SCOP, m²"
+    - "Spiega benefici concreti (silenziosità per camera, m² coperti)"
+    - "Distingui tra cooling-only e pompa di calore (heating)"
+    - "Menziona compatibilità smart home se presente"
+    - "Indica chiaramente cosa è incluso (kit, telecomando, app)"
+  dont:
+    - "NO 'aria pulita garantita', 'salute migliore' - claim medici non documentabili"
+    - "NO confronti diretti con competitor"
+    - "NO promesse di riduzione bolletta in % senza dato di consumo specifico"
+    - "NO 'silenziosissimo' senza dB · NO 'potentissimo' senza BTU"
+    - "NO indicare bonus fiscali nel title (vietato GMC), solo in description se rilevante"

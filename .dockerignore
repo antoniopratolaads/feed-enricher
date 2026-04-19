@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.DS_Store
+.streamlit/secrets.toml
+*.log
+.pytest_cache
+node_modules
+.env
+.env.local

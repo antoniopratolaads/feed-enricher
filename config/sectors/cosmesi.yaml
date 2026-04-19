@@ -1,0 +1,291 @@
+# Best practice COSMESI / BEAUTY / SKINCARE / HAIRCARE
+# Usa SOLO attributi UFFICIALI Google Merchant Center mappabili.
+# Riferimenti: GMC Apparel & Accessories > Beauty
+# Niente attributi inventati: tutto ciò che è qui è importabile in GMC.
+
+sector: cosmesi
+display_name: Cosmesi / Beauty / Skincare
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {linea} {tipo_prodotto} {ingrediente_chiave} {volume}"
+  formula_examples:
+    - "L'Oréal Revitalift Filler Crema Antirughe Acido Ialuronico 50ml"
+    - "The Ordinary Niacinamide 10% + Zinc 1% Siero Viso 30ml"
+    - "Kérastase Genesis Bain Hydra-Fortifiant Shampoo Capelli Fragili 250ml"
+    - "Bioderma Sensibio H2O Acqua Micellare Pelle Sensibile 500ml"
+    - "Maybelline Sky High Mascara Volumizzante Allungante Black 7.2ml"
+  rules:
+    - "Brand SEMPRE all'inizio"
+    - "Includere SEMPRE: tipo prodotto + volume/quantità (ml, g, oz)"
+    - "Specificare ingrediente attivo principale se distintivo (acido ialuronico, vitamina C, retinolo, niacinamide)"
+    - "Indicare zona di applicazione se non ovvia (viso, corpo, capelli, occhi, mani, labbra)"
+    - "Per make-up: indicare colore/finish (black, nude, matte, glossy)"
+    - "70-150 char Google · max 200 Meta"
+    - "NO claim medici ('cura', 'guarisce', 'elimina')"
+    - "NO 'naturale' / 'bio' senza certificazione formale"
+    - "NO emoji, NO superlativi vuoti"
+  forbidden_words:
+    - "acquista"
+    - "compra ora"
+    - "offerta"
+    - "saldo"
+    - "scontato"
+    - "miracoloso"
+    - "guarisce"
+    - "cura"
+    - "elimina rughe"
+    - "100% naturale"  # se non certificato
+    - "anti-aging definitivo"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è (tipo prodotto, volume) e per quale tipo di pelle/capello/uso"
+    - "Frase 2: ingredienti chiave + loro funzione (acido ialuronico per idratazione)"
+    - "Frase 3: benefici concreti e desumibili (NON claim medici)"
+    - "Frase 4: modalità d'uso (mattina/sera, prima/dopo, frequenza)"
+    - "Frase 5 (opz.): texture, profumazione, certificazioni (vegan, cruelty-free, dermatologically tested)"
+  length:
+    min_chars: 250
+    ideal_chars: 600
+    max_chars: 5000
+  tone:
+    - "Tecnico-divulgativo. Ingredienti e percentuali quando dichiarati"
+    - "Concreto: 'idrata fino a 24h' meglio di 'idratazione profonda'"
+    - "Cita certificazioni se presenti (Ecocert, Cosmos, Vegan Society)"
+    - "Indica claims testati (es. 'clinicamente testato', 'dermatologically tested')"
+  must_include:
+    - "Volume/quantità in unità standard (ml, g, oz)"
+    - "Tipo di pelle/capello (se applicabile)"
+    - "Ingredienti chiave (NON la lista INCI completa, sintesi)"
+    - "Modalità d'uso base"
+
+# ============================================================
+# ATTRIBUTI UFFICIALI GMC PER COSMESI
+# Tutti questi sono campi standard GMC importabili
+# ============================================================
+required_attributes:
+  - name: brand
+    required: true
+    note: "Obbligatorio per cosmesi GMC"
+
+  - name: gtin
+    required_if_brand: true
+    note: "EAN-13 disponibile per quasi tutti i cosmetici brandizzati"
+
+  - name: mpn
+    note: "Codice prodotto produttore (es. L'Oréal: A95234, The Ordinary: GLY...)"
+
+  # Attributi standard apparel/beauty applicabili
+  - name: gender
+    values: [male, female, unisex]
+    italian_synonyms:
+      male: [uomo, men, mens, lui]
+      female: [donna, women, womens, lei]
+      unisex: [unisex, all]
+    default_for_skincare: unisex
+    default_for_makeup: female
+
+  - name: age_group
+    values: [newborn, infant, toddler, kids, adult]
+    default_for_cosmetics: adult
+    note: "Usa kids per linee baby/bambino specifiche (Mustela, Chicco)"
+
+  - name: color
+    note: "OBBLIGATORIO per make-up (rossetti, fondotinta, ombretti). Usa il NOME del colore prodotto (es. 'Rouge Allure 91 Bohème')"
+    rules:
+      - "Per make-up usa il nome ufficiale del shade"
+      - "Aggiungi anche il colore generico tra parentesi se utile (es. 'Bohème (rosso ciliegia)')"
+
+  - name: size
+    note: "Per cosmesi = VOLUME del prodotto (50ml, 200g, 7.2ml)"
+    rules:
+      - "Formato: '{numero} {unità}' senza spazio o con spazio coerente"
+      - "Unità accettate: ml, g, oz, fl oz"
+      - "Per multipack indica VOLUME SINGOLO (es. '6x30ml')"
+
+  - name: size_system
+    default: "EU"
+    note: "Per cosmesi spesso non rilevante, lascia EU o vuoto"
+
+  - name: material
+    note: "Usa per packaging quando rilevante: 'vetro', 'alluminio', 'plastica riciclata', 'refill'"
+
+  - name: pattern
+    note: "NON applicabile alla cosmesi standard, lascia vuoto"
+
+  - name: condition
+    values: [new, refurbished, used]
+    default: new
+
+  - name: item_group_id
+    critical: true
+    note: "RAGGRUPPA varianti dello stesso prodotto (es. crema 50ml + 100ml + refill)"
+
+# ============================================================
+# product_highlight (NUOVO campo GMC, fino a 10 bullet)
+# Importante per cosmesi: ingredienti chiave, benefici, certificazioni
+# ============================================================
+product_highlight:
+  enabled: true
+  max_bullets: 10
+  recommended_for_cosmetics:
+    - "Ingrediente attivo principale e percentuale (es. 'Niacinamide 10%')"
+    - "Beneficio chiave testato (es. 'Idratazione 24h clinicamente provata')"
+    - "Tipo di pelle/capello target (es. 'Pelle sensibile e reattiva')"
+    - "Texture (es. 'Texture fluida non grassa')"
+    - "Profumazione (es. 'Senza profumo' / 'Profumazione fresca agrumata')"
+    - "Certificazioni (es. 'Cruelty-free certificato Leaping Bunny')"
+    - "Cosa NON contiene (es. 'Senza parabeni, solfati, alcol')"
+    - "Modalità d'uso essenziale (es. 'Applicare mattina e sera')"
+    - "Made in (es. 'Made in France')"
+    - "Test (es. 'Dermatologicamente testato')"
+  rules:
+    - "Massimo 10 bullet, ogni bullet sotto i 150 caratteri"
+    - "Frasi affermative, NON imperative"
+    - "Verificabili dal testo del prodotto. NON inventare percentuali"
+
+# ============================================================
+# product_detail (NUOVO campo GMC strutturato)
+# Per cosmesi: ingredienti chiave, claims, modalità d'uso
+# ============================================================
+product_detail:
+  enabled: true
+  schema:
+    - section_name: "Ingredienti chiave"
+      attribute_name: "Attivi principali"
+      attribute_value: "es. 'Acido Ialuronico 1.5%, Vitamina C 10%'"
+    - section_name: "Caratteristiche"
+      attribute_name: "Tipo di pelle"
+      attribute_value: "es. 'Mista, grassa, a tendenza acneica'"
+    - section_name: "Caratteristiche"
+      attribute_name: "Zona di applicazione"
+      attribute_value: "es. 'Viso, contorno occhi'"
+    - section_name: "Caratteristiche"
+      attribute_name: "Texture"
+      attribute_value: "es. 'Crema leggera'"
+    - section_name: "Modo d'uso"
+      attribute_name: "Frequenza"
+      attribute_value: "es. 'Mattina e sera'"
+    - section_name: "Certificazioni"
+      attribute_name: "Etiche"
+      attribute_value: "es. 'Vegan, Cruelty-free'"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY COSMESI
+# ============================================================
+google_taxonomy:
+  root: "Health & Beauty > Personal Care > Cosmetics"
+  common_paths:
+    - "Health & Beauty > Personal Care > Cosmetics > Skin Care > Face Moisturizer"
+    - "Health & Beauty > Personal Care > Cosmetics > Skin Care > Anti-Aging Skin Care Kits"
+    - "Health & Beauty > Personal Care > Cosmetics > Skin Care > Face Cleansers"
+    - "Health & Beauty > Personal Care > Cosmetics > Skin Care > Sunscreen"
+    - "Health & Beauty > Personal Care > Cosmetics > Skin Care > Body Lotions"
+    - "Health & Beauty > Personal Care > Cosmetics > Make-Up > Face Make-Up > Foundations"
+    - "Health & Beauty > Personal Care > Cosmetics > Make-Up > Face Make-Up > Concealers & Color Correctors"
+    - "Health & Beauty > Personal Care > Cosmetics > Make-Up > Lip Make-Up > Lipstick"
+    - "Health & Beauty > Personal Care > Cosmetics > Make-Up > Eye Make-Up > Mascara"
+    - "Health & Beauty > Personal Care > Cosmetics > Make-Up > Eye Make-Up > Eyeshadow"
+    - "Health & Beauty > Personal Care > Cosmetics > Make-Up > Make-Up Sets"
+    - "Health & Beauty > Personal Care > Cosmetics > Bath & Body > Body Wash"
+    - "Health & Beauty > Personal Care > Cosmetics > Perfume & Cologne"
+    - "Health & Beauty > Personal Care > Cosmetics > Hair Care > Shampoo & Conditioner"
+    - "Health & Beauty > Personal Care > Cosmetics > Hair Care > Hair Color"
+    - "Health & Beauty > Personal Care > Cosmetics > Nail Care > Nail Polish"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Sfondo bianco per main image (preferito GMC)"
+  - "Mostrare il PACKAGING reale con etichetta leggibile"
+  - "Risoluzione minima 800x800, ideale 1200x1200"
+  - "additional_image_link: texture, swatch (per make-up), packaging back con INCI, foto applicato"
+  - "Per make-up con varianti colore: foto SPECIFICA della variante (rossetto sul labbro, ombretto)"
+  - "NO foto promozionali con prezzi/offerte sovrapposti"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required: true
+    note: "EAN-13 stampato sul packaging. Per multipack EAN diverso da singolo"
+  mpn:
+    note: "Codice produttore (Reference). ESSENZIALE quando manca GTIN"
+  identifier_exists:
+    rule: "no se mancano sia gtin sia mpn"
+
+# ============================================================
+# PREZZO E PROMO
+# ============================================================
+pricing:
+  - "price: prezzo intero, sale_price: prezzo scontato (NON metterlo in price)"
+  - "Per cosmesi multipack: indica prezzo TOTALE confezione, non per singolo"
+  - "unit_pricing_measure + unit_pricing_base_measure per €/100ml o €/100g (UTILE per confronti)"
+
+unit_pricing:
+  example_measure: "50 ml"
+  example_base: "100 ml"
+  note: "GMC mostra automaticamente €/100ml. Aiuta confronti, MOLTO utile per cosmesi"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE PER COSMESI
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "categoria_beauty (skincare / makeup / haircare / fragrance / nail / bath_body)"
+  custom_label_1: "fascia_prezzo (drugstore / mid_range / premium / luxury)"
+  custom_label_2: "ingrediente_hero (retinol / hyaluronic / vit_c / niacinamide / aha_bha / spf)"
+  custom_label_3: "tipo_pelle_capelli (sensibile / grassa / secca / mista / acneica / matura / colorati)"
+  custom_label_4: "certificazione (vegan / cruelty_free / organic / dermatologically_tested / nessuna)"
+
+# ============================================================
+# DIFFERENZE GOOGLE vs META
+# ============================================================
+platform_differences:
+  google:
+    title_max: 150
+    description_max: 5000
+    requires: [google_product_category, condition, gtin, brand]
+    extra_useful: [product_highlight, product_detail, unit_pricing_measure]
+  meta:
+    title_max: 200
+    description_max: 9999
+    short_description_max: 200
+    requires: [condition, brand, fb_product_category]
+    extra_useful: [rich_text_description, video_url]
+
+# ============================================================
+# COMPLIANCE & NORMATIVE COSMESI
+# ============================================================
+compliance:
+  - "Reg. CE 1223/2009 sui prodotti cosmetici - INCI obbligatorio sul prodotto"
+  - "PIF (Product Information File) richiesto per vendita UE"
+  - "Notifica CPNP per immissione sul mercato UE"
+  - "NO claims medici (Reg. 655/2013) - distingui cosmetic da medical device"
+  - "RAEE NON applicabile · imballaggio sì (CONAI)"
+
+# ============================================================
+# TONO DI VOCE PER L'AI
+# ============================================================
+ai_voice:
+  do:
+    - "Linguaggio scientifico-divulgativo"
+    - "Cita ingredienti con percentuali QUANDO presenti nel testo source"
+    - "Indica tipi di pelle/capello target"
+    - "Menziona texture, profumazione, finish"
+    - "Cita certificazioni e claims SOLO se documentati nel source"
+  dont:
+    - "NO claim medici ('cura acne', 'guarisce dermatite')"
+    - "NO promesse risultati garantiti ('rughe sparite in 7 giorni')"
+    - "NO 'naturale al 100%' senza certificazione"
+    - "NO confronti con farmaci o procedure mediche"
+    - "NO inventare percentuali di ingredienti se non specificate"
+    - "NO 'miracoloso', 'rivoluzionario', 'unico al mondo'"

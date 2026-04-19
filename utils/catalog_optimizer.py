@@ -1,0 +1,224 @@
+"""Builder cataloghi ottimizzati per Google Merchant Center e Meta Catalog.
+
+Riferimenti:
+- Google: https://support.google.com/merchants/answer/7052112 (specifica feed)
+- Meta:   https://www.facebook.com/business/help/120325381656392 (catalog reference)
+
+Best practice titoli/descrizioni adottate (sintesi GMC + Meta + community):
+- Title Google: 70-150 char, formato `Brand + Tipo prodotto + Attributi chiave`
+- Title Meta: max 200 char, idem
+- Description: 500-5000 char Google · 200 short / 9999 long Meta
+- Availability values normalizzati: in_stock | out_of_stock | preorder | backorder
+- Condition: new | refurbished | used
+- Identifier_exists = no se mancano sia gtin sia mpn (Google)
+"""
+from __future__ import annotations
+import pandas as pd
+import re
+
+# ---------- Specifiche campi ----------
+
+# (target_col, [source_cols in priority order], required_for_gmc, required_for_meta)
+GOOGLE_FIELDS = [
+    ("id",                            ["id"],                                  True,  True),
+    ("title",                         ["title"],                               True,  True),
+    ("description",                   ["description"],                         True,  True),
+    ("link",                          ["link"],                                True,  True),
+    ("image_link",                    ["image_link"],                          True,  True),
+    ("additional_image_link",         ["additional_image_link"],               False, False),
+    ("availability",                  ["availability"],                        True,  True),
+    ("price",                         ["price"],                               True,  True),
+    ("sale_price",                    ["sale_price"],                          False, False),
+    ("brand",                         ["brand"],                               True,  True),
+    ("gtin",                          ["gtin"],                                False, False),
+    ("mpn",                           ["mpn"],                                 False, False),
+    ("identifier_exists",             [],                                      False, False),  # calcolato
+    ("condition",                     ["condition"],                           True,  True),
+    ("google_product_category",       ["google_product_category"], True, True),
+    ("product_type",                  ["product_type"],     False, False),
+    ("color",                         ["color"],                   False, False),
+    ("size",                          ["size"],                     False, False),
+    ("material",                      ["material"],             False, False),
+    ("pattern",                       ["pattern"],               False, False),
+    ("gender",                        ["gender"],                 False, False),
+    ("age_group",                     ["age_group"],           False, False),
+    ("item_group_id",                 ["item_group_id"],                       False, False),
+    ("custom_label_0",                ["custom_label_0"],                      False, False),
+    ("custom_label_1",                ["custom_label_1"],                      False, False),
+    ("custom_label_2",                ["custom_label_2"],                      False, False),
+    ("custom_label_3",                ["custom_label_3"],                      False, False),
+    ("custom_label_4",                ["custom_label_4"],                      False, False),
+    # ========== CAMPI GMC AGGIUNTIVI UFFICIALI ==========
+    ("product_highlight",             ["product_highlight"],                   False, False),
+    ("product_detail",                ["product_detail"],                      False, False),
+    ("unit_pricing_measure",          ["unit_pricing_measure"],                False, False),
+    ("unit_pricing_base_measure",     ["unit_pricing_base_measure"],           False, False),
+    ("shipping_weight",               ["shipping_weight"],                     False, False),
+    ("is_bundle",                     ["is_bundle"],                           False, False),
+    ("multipack",                     ["multipack"],                           False, False),
+    ("availability_date",             ["availability_date"],                   False, False),
+    ("expiration_date",               ["expiration_date"],                     False, False),
+]
+
+# Meta-specific aggiuntivi (oltre a quelli sopra)
+META_EXTRA = [
+    ("rich_text_description",   ["description"]),
+    ("short_description",       ["description_meta_short", "description"]),
+    ("inventory",               ["quantity"]),
+    ("fb_product_category",     ["google_product_category"]),
+]
+
+
+def _normalize_availability(v: str) -> str:
+    s = str(v).lower().strip()
+    if not s or s in ("nan", "none"):
+        return "out of stock"
+    if "in stock" in s or "in_stock" in s or s in ("yes", "available", "disponibile"):
+        return "in stock"
+    if "preorder" in s or "pre-order" in s or "pre_order" in s:
+        return "preorder"
+    if "backorder" in s:
+        return "backorder"
+    return "out of stock"
+
+
+def _normalize_condition(v: str) -> str:
+    s = str(v).lower().strip()
+    if "refurb" in s or "ricondizionato" in s:
+        return "refurbished"
+    if "used" in s or "usato" in s or "second" in s:
+        return "used"
+    return "new"
+
+
+def _normalize_price(v: str, currency: str = "EUR") -> str:
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none"):
+        return ""
+    # se già contiene una valuta, lascia
+    if re.search(r"[A-Z]{3}", s):
+        return s
+    num = re.sub(r"[^\d.,-]", "", s).replace(",", ".")
+    try:
+        return f"{float(num):.2f} {currency}"
+    except ValueError:
+        return s
+
+
+def _truncate(text: str, max_len: int) -> str:
+    text = str(text or "").strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len - 1].rsplit(" ", 1)[0] + "…"
+
+
+def _coalesce(row: pd.Series, cols: list[str]) -> str:
+    for c in cols:
+        if c in row.index:
+            v = row[c]
+            if pd.notna(v) and str(v).strip() not in ("", "nan"):
+                return str(v).strip()
+    return ""
+
+
+def build_google_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
+    """Genera DataFrame conforme a Google Merchant Center con normalizzazioni."""
+    out = pd.DataFrame(index=df.index)
+    for target, sources, _, _ in GOOGLE_FIELDS:
+        if target == "identifier_exists":
+            continue
+        out[target] = df.apply(lambda r: _coalesce(r, sources), axis=1) if sources else ""
+
+    # normalizzazioni
+    out["availability"] = out["availability"].map(_normalize_availability)
+    out["condition"] = out["condition"].map(_normalize_condition)
+    out["price"] = out["price"].map(lambda v: _normalize_price(v, currency))
+    out["sale_price"] = out["sale_price"].map(lambda v: _normalize_price(v, currency) if v else "")
+    # title 70-150
+    out["title"] = out["title"].map(lambda v: _truncate(v, 150))
+    # description 500-5000
+    out["description"] = out["description"].map(lambda v: _truncate(v, 5000))
+    # identifier_exists
+    out["identifier_exists"] = out.apply(
+        lambda r: "no" if not r["gtin"] and not r["mpn"] else "yes", axis=1
+    )
+    # column order
+    cols = [t for t, _, _, _ in GOOGLE_FIELDS]
+    out = out[cols]
+    return out
+
+
+def build_meta_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
+    """Genera DataFrame conforme a Meta Catalog."""
+    out = pd.DataFrame(index=df.index)
+
+    # base fields (subset di Google)
+    meta_base = [t for t, _, _, m in GOOGLE_FIELDS if m or t in (
+        "color", "size", "material", "pattern", "gender", "age_group", "item_group_id",
+        "custom_label_0", "custom_label_1", "custom_label_2", "custom_label_3", "custom_label_4",
+        "additional_image_link", "sale_price", "gtin", "mpn", "product_type", "google_product_category"
+    )]
+    field_map = {t: srcs for t, srcs, _, _ in GOOGLE_FIELDS}
+
+    for t in meta_base:
+        srcs = field_map.get(t, [])
+        out[t] = df.apply(lambda r: _coalesce(r, srcs), axis=1) if srcs else ""
+
+    # extra Meta
+    for t, srcs in META_EXTRA:
+        out[t] = df.apply(lambda r: _coalesce(r, srcs), axis=1)
+
+    # normalizzazioni
+    out["availability"] = out["availability"].map(_normalize_availability)
+    out["condition"] = out["condition"].map(_normalize_condition)
+    out["price"] = out["price"].map(lambda v: _normalize_price(v, currency))
+    if "sale_price" in out.columns:
+        out["sale_price"] = out["sale_price"].map(lambda v: _normalize_price(v, currency) if v else "")
+    # se esiste title_meta nell'origine, usalo (più descrittivo per Meta)
+    if "title_meta" in df.columns:
+        out["title"] = df.apply(
+            lambda r: r["title_meta"] if str(r.get("title_meta", "")).strip()
+                       else _coalesce(r, ["title"]), axis=1
+        )
+    out["title"] = out["title"].map(lambda v: _truncate(v, 200))
+    out["description"] = out["description"].map(lambda v: _truncate(v, 9999))
+    if "short_description" in out.columns:
+        out["short_description"] = out["short_description"].map(lambda v: _truncate(v, 200))
+
+    return out
+
+
+def validate_feed(df: pd.DataFrame, target: str = "google") -> pd.DataFrame:
+    """Ritorna un DataFrame con righe = campo, colonne = errori/warning."""
+    spec = GOOGLE_FIELDS if target == "google" else GOOGLE_FIELDS  # meta usa stessi required base
+    rows = []
+    n = len(df)
+    for t, _, gmc_req, meta_req in spec:
+        if t not in df.columns:
+            rows.append({"campo": t, "richiesto": gmc_req if target == "google" else meta_req,
+                         "stato": "MISSING_COLUMN", "compilazione_%": 0})
+            continue
+        filled = df[t].astype(str).str.strip().ne("").sum()
+        pct = round(filled / n * 100, 1) if n else 0
+        req = gmc_req if target == "google" else meta_req
+        if req and pct < 100:
+            stato = "ERROR" if pct < 90 else "WARN"
+        else:
+            stato = "OK"
+        rows.append({"campo": t, "richiesto": req, "stato": stato, "compilazione_%": pct})
+    return pd.DataFrame(rows)
+
+
+def title_quality_check(df: pd.DataFrame, title_col: str = "title") -> pd.DataFrame:
+    """Analizza la qualità dei titoli con metriche tipo GMC."""
+    titles = df[title_col].astype(str)
+    return pd.DataFrame({
+        "title_len_avg": [titles.str.len().mean()],
+        "title_len_min": [titles.str.len().min()],
+        "title_len_max": [titles.str.len().max()],
+        "too_short_<40": [(titles.str.len() < 40).sum()],
+        "ideal_70_150": [titles.str.len().between(70, 150).sum()],
+        "too_long_>150": [(titles.str.len() > 150).sum()],
+        "all_caps": [titles.apply(lambda t: t.isupper() and len(t) > 5).sum()],
+        "duplicates": [titles.duplicated().sum()],
+    })
