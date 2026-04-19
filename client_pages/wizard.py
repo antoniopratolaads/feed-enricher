@@ -4,7 +4,7 @@ import pandas as pd
 import io, zipfile
 
 from utils.state import init_state, current_df
-from utils.ui import apply_theme
+from utils.ui import apply_theme, api_key_banner
 from utils.history import (
     init_session, save_snapshot, log_event, set_project_name, get_project_name,
     get_project_info, list_projects, restore_snapshot, touch_project, save_output,
@@ -23,6 +23,8 @@ if "config" not in st.session_state:
     st.session_state["config"] = load_config()
     if st.session_state["config"].get("anthropic_api_key"):
         st.session_state["api_key"] = st.session_state["config"]["anthropic_api_key"]
+
+api_key_banner()
 
 if "wizard_step" not in st.session_state:
     st.session_state["wizard_step"] = 1

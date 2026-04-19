@@ -619,3 +619,57 @@ def page_header(title: str, subtitle: str = ""):
     st.markdown(f"# {title}")
     if subtitle:
         st.caption(subtitle)
+
+
+def api_key_banner():
+    """Show warning banner on top of page if Anthropic API key missing.
+
+    Includes inline CTA to jump to Settings. Safe to call from any page
+    - renders nothing when key is present.
+    """
+    cfg = st.session_state.get("config", {}) or {}
+    has_key = bool(cfg.get("anthropic_api_key") or cfg.get("openai_api_key"))
+    if has_key:
+        return
+    st.markdown(
+        "<div style='background:#FEF3C7; border:1px solid #F59E0B; "
+        "border-left:4px solid #F59E0B; padding:14px 18px; border-radius:12px; "
+        "margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; gap:16px;'>"
+        "<div><strong style='color:#92400E;'>API key mancante</strong> "
+        "<span style='color:#78350F;'>— l'enrichment AI richiede una chiave Claude o OpenAI. "
+        "Vai su Settings per configurarla.</span></div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    if st.button("Apri Settings →", key="_api_key_banner_cta", type="primary"):
+        st.switch_page("client_pages/settings.py")
+
+
+def render_sidebar_status():
+    """Compact status panel in sidebar: API key state + active project."""
+    cfg = st.session_state.get("config", {}) or {}
+    has_anthropic = bool(cfg.get("anthropic_api_key"))
+    has_openai = bool(cfg.get("openai_api_key"))
+
+    api_status = "●  AI pronto" if (has_anthropic or has_openai) else "○  API key mancante"
+    api_color = "#10B981" if (has_anthropic or has_openai) else "#EF4444"
+
+    df = st.session_state.get("feed_df")
+    n_products = len(df) if df is not None else 0
+    feed_line = (
+        f"<div style='color:#4B5563; font-size:0.78rem;'>"
+        f"<span style='color:#10B981;'>●</span>&nbsp;&nbsp;Feed: <b>{n_products:,}</b> prodotti</div>"
+        if n_products > 0
+        else "<div style='color:#9CA3AF; font-size:0.78rem;'>○&nbsp;&nbsp;Nessun feed caricato</div>"
+    )
+
+    st.markdown(
+        f"""
+        <div style='background:#F4F5F7; border:1px solid #E5E7EB; border-radius:10px;
+                    padding:10px 12px; margin:6px 0 14px; font-size:0.78rem;'>
+            <div style='color:{api_color}; font-weight:600; margin-bottom:4px;'>{api_status}</div>
+            {feed_line}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
