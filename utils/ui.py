@@ -4,6 +4,7 @@ import streamlit as st
 HORIZON_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Geist:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
 
 /* ============================================================
    COLOR SYSTEM — clean tech (light + blue)
@@ -60,6 +61,26 @@ HORIZON_CSS = """
    ============================================================ */
 * {
     font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Preserve Streamlit Material Symbols icons (overrides the `*` rule above) */
+[data-testid="stIconMaterial"],
+span.material-symbols-rounded,
+span.material-icons,
+span.material-icons-outlined,
+span.material-icons-rounded,
+span.material-icons-sharp {
+    font-family: 'Material Symbols Rounded', 'Material Icons' !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    white-space: nowrap !important;
+    word-wrap: normal !important;
+    direction: ltr !important;
+    -webkit-font-feature-settings: 'liga';
     -webkit-font-smoothing: antialiased;
 }
 
