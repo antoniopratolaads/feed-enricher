@@ -673,3 +673,288 @@ def render_sidebar_status():
         """,
         unsafe_allow_html=True,
     )
+
+
+# ============================================================
+# STEPPER (wizard progress indicator)
+# ============================================================
+def stepper(steps: list[str], current: int):
+    """Visual progress indicator for multi-step flows.
+
+    Args:
+        steps: list of labels, one per step (e.g. ["Upload", "Settore", "AI", "Export"])
+        current: 1-based index of the currently active step
+    """
+    total = len(steps)
+    pct = int(((current - 1) / max(total - 1, 1)) * 100) if total > 1 else 100
+    nodes = []
+    for i, label in enumerate(steps, start=1):
+        if i < current:
+            state, bg, fg, border = "done", "#2F6FED", "#FFFFFF", "#2F6FED"
+            icon_html = "✓"
+        elif i == current:
+            state, bg, fg, border = "active", "#FFFFFF", "#2F6FED", "#2F6FED"
+            icon_html = str(i)
+        else:
+            state, bg, fg, border = "pending", "#FFFFFF", "#9CA3AF", "#E5E7EB"
+            icon_html = str(i)
+        nodes.append(
+            f"<div class='step-node step-{state}' style='text-align:center; flex:1; position:relative;'>"
+            f"<div style='width:36px; height:36px; border-radius:50%; margin:0 auto; "
+            f"display:flex; align-items:center; justify-content:center; background:{bg}; "
+            f"color:{fg}; border:2px solid {border}; font-weight:700; font-size:0.9rem; "
+            f"box-shadow:{'0 2px 8px rgba(47,111,237,0.25)' if state=='active' else 'none'};'>"
+            f"{icon_html}</div>"
+            f"<div style='margin-top:8px; font-size:0.75rem; font-weight:{600 if state!='pending' else 400}; "
+            f"color:{'#0A0A0F' if state!='pending' else '#9CA3AF'};'>{label}</div>"
+            f"</div>"
+        )
+
+    st.markdown(
+        "<div style='position:relative; padding:8px 12px 20px;'>"
+        f"<div style='position:absolute; top:26px; left:12%; right:12%; height:2px; background:#E5E7EB; z-index:0;'></div>"
+        f"<div style='position:absolute; top:26px; left:12%; width:calc({pct}% * 0.76); height:2px; background:#2F6FED; z-index:0; transition:width 0.3s;'></div>"
+        f"<div style='display:flex; align-items:flex-start; position:relative; z-index:1;'>{''.join(nodes)}</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# EMPTY STATE — graceful page when prerequisite missing
+# ============================================================
+def empty_state(icon: str, title: str, description: str, cta_label: str | None = None,
+                cta_page: str | None = None, cta_key: str | None = None):
+    """Render a centered empty state with optional CTA button.
+
+    Replaces `st.warning(...) + st.stop()` pattern with a designed placeholder.
+    """
+    st.markdown(
+        f"""
+        <div style='text-align:center; padding:64px 32px; max-width:520px; margin:40px auto;
+                    background:#FFFFFF; border:1px solid #E5E7EB; border-radius:16px;
+                    box-shadow:0 1px 3px rgba(10,10,15,0.04);'>
+            <div style='font-size:3rem; margin-bottom:12px; opacity:0.7;'>{icon}</div>
+            <div style='font-size:1.25rem; font-weight:700; color:#0A0A0F; margin-bottom:8px;'>{title}</div>
+            <div style='font-size:0.9rem; color:#6B7280; line-height:1.55; margin-bottom:20px;'>{description}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if cta_label and cta_page:
+        col = st.columns([1, 2, 1])[1]
+        with col:
+            if st.button(cta_label, type="primary", use_container_width=True,
+                         key=cta_key or f"_empty_cta_{cta_page}"):
+                st.switch_page(cta_page)
+
+
+# ============================================================
+# ERROR BOUNDARY
+# ============================================================
+def guarded(block_name: str = "questa operazione"):
+    """Decorator / context manager to render exceptions as a friendly error card.
+
+    Use as context manager:
+        with guarded("enrichment"):
+            do_heavy_stuff()
+    """
+    import contextlib
+    import traceback
+
+    @contextlib.contextmanager
+    def _cm():
+        try:
+            yield
+        except Exception as e:  # noqa: BLE001
+            tb = traceback.format_exc(limit=6)
+            st.markdown(
+                f"""
+                <div style='background:#FEF2F2; border:1px solid #FCA5A5; border-left:4px solid #EF4444;
+                            padding:14px 18px; border-radius:12px; margin:12px 0;'>
+                    <div style='color:#991B1B; font-weight:700; margin-bottom:4px;'>
+                        Errore durante {block_name}
+                    </div>
+                    <div style='color:#7F1D1D; font-size:0.88rem;'>{type(e).__name__}: {e}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            with st.expander("Dettagli tecnici (per debug)", expanded=False):
+                st.code(tb, language="text")
+            st.stop()
+
+    return _cm()
+
+
+# ============================================================
+# COST ESTIMATOR
+# ============================================================
+# Prezzi pubblici Claude + OpenAI (USD per 1M token · aggiornare periodicamente)
+_PRICES = {
+    # Anthropic Claude (Oct 2025 tiers)
+    "claude-sonnet-4-6":   {"input": 3.00, "output": 15.00},
+    "claude-haiku-4-5":    {"input": 1.00, "output": 5.00},
+    "claude-opus-4-6":     {"input": 15.00, "output": 75.00},
+    # OpenAI
+    "gpt-4o-mini":         {"input": 0.15, "output": 0.60},
+    "gpt-4o":              {"input": 2.50, "output": 10.00},
+    "gpt-4-turbo":         {"input": 10.00, "output": 30.00},
+    "gpt-3.5-turbo":       {"input": 0.50, "output": 1.50},
+}
+
+
+def estimate_cost(n_rows: int, model: str,
+                  tokens_in_per_row: int = 250, tokens_out_per_row: int = 180) -> dict:
+    """Rough cost estimate for enrichment of N rows with given model.
+
+    Defaults assume a compact product context (title, brand, price, ~8 fields)
+    and an enriched output with title + description + classification.
+
+    Returns: dict(input_usd, output_usd, total_usd, total_eur, total_tokens_in, total_tokens_out)
+    """
+    p = _PRICES.get(model, _PRICES["claude-sonnet-4-6"])
+    total_in = n_rows * tokens_in_per_row
+    total_out = n_rows * tokens_out_per_row
+    usd_in = total_in / 1_000_000 * p["input"]
+    usd_out = total_out / 1_000_000 * p["output"]
+    total_usd = usd_in + usd_out
+    eur = total_usd * 0.93  # rough EUR/USD 2026
+    return {
+        "input_usd": usd_in,
+        "output_usd": usd_out,
+        "total_usd": total_usd,
+        "total_eur": eur,
+        "tokens_in": total_in,
+        "tokens_out": total_out,
+    }
+
+
+def cost_estimate_card(n_rows: int, model: str):
+    """Display a compact cost estimate card before launching enrichment."""
+    if n_rows <= 0:
+        return
+    est = estimate_cost(n_rows, model)
+    tone_color = "#10B981" if est["total_eur"] < 2 else ("#F59E0B" if est["total_eur"] < 10 else "#EF4444")
+    st.markdown(
+        f"""
+        <div style='background:#F9FAFB; border:1px solid #E5E7EB; border-radius:12px;
+                    padding:14px 18px; margin:8px 0;'>
+            <div style='display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;'>
+                <div>
+                    <div style='font-size:0.75rem; color:#6B7280; text-transform:uppercase; letter-spacing:0.05em;'>
+                        Stima costo {model}
+                    </div>
+                    <div style='font-size:1.5rem; font-weight:700; color:{tone_color};'>
+                        ~ €{est['total_eur']:.2f}
+                    </div>
+                </div>
+                <div style='font-size:0.78rem; color:#6B7280; line-height:1.6;'>
+                    {n_rows:,} prodotti · {est['tokens_in']:,} tok in · {est['tokens_out']:,} tok out<br>
+                    ${est['total_usd']:.3f} USD totali ({model})
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# DIFF PREVIEW — compare before/after enrichment
+# ============================================================
+def diff_view(label: str, before: str, after: str):
+    """Render a side-by-side before/after diff card."""
+    import html
+    before_html = html.escape((before or "—").strip()) or "—"
+    after_html = html.escape((after or "—").strip()) or "—"
+    changed = before_html != after_html
+    border = "#E5E7EB" if not changed else "#DCE7FE"
+    st.markdown(
+        f"""
+        <div style='border:1px solid {border}; border-radius:12px; margin:8px 0; overflow:hidden;
+                    background:#FFFFFF;'>
+            <div style='background:#F4F5F7; padding:8px 14px; font-size:0.8rem; font-weight:600;
+                        color:#4B5563; border-bottom:1px solid {border};'>{label}</div>
+            <div style='display:grid; grid-template-columns:1fr 1fr; gap:0;'>
+                <div style='padding:12px 14px; background:#FEF2F2; border-right:1px solid {border};
+                            font-size:0.85rem; color:#7F1D1D; white-space:pre-wrap; word-break:break-word;'>
+                    <div style='font-size:0.7rem; color:#EF4444; text-transform:uppercase;
+                                font-weight:600; margin-bottom:6px; letter-spacing:0.05em;'>Prima</div>
+                    {before_html}
+                </div>
+                <div style='padding:12px 14px; background:#ECFDF5;
+                            font-size:0.85rem; color:#065F46; white-space:pre-wrap; word-break:break-word;'>
+                    <div style='font-size:0.7rem; color:#10B981; text-transform:uppercase;
+                                font-weight:600; margin-bottom:6px; letter-spacing:0.05em;'>Dopo</div>
+                    {after_html}
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# LOADING PROGRESS — richer than plain spinner
+# ============================================================
+class LoadingProgress:
+    """Contextual progress tracker with ETA. Use as context manager.
+
+        with LoadingProgress("Enrichment AI", total=len(df)) as p:
+            for i, row in enumerate(df.itertuples()):
+                ...
+                p.update(i+1, subtitle=f"Prodotto: {row.title[:40]}")
+    """
+    def __init__(self, title: str, total: int):
+        import time
+        self.title = title
+        self.total = max(total, 1)
+        self._container = st.empty()
+        self._bar = st.progress(0.0)
+        self._start = time.time()
+        self._t = time
+
+    def __enter__(self):
+        self._render(0, "")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            self._container.empty()
+            self._bar.empty()
+        return False
+
+    def update(self, done: int, subtitle: str = ""):
+        done = min(done, self.total)
+        pct = done / self.total
+        self._bar.progress(pct)
+        elapsed = self._t.time() - self._start
+        eta = (elapsed / max(done, 1)) * (self.total - done) if done else None
+        self._render(done, subtitle, elapsed, eta)
+
+    def _render(self, done: int, subtitle: str, elapsed: float = 0, eta: float | None = None):
+        eta_str = ""
+        if eta is not None and eta > 0:
+            m, s = divmod(int(eta), 60)
+            eta_str = f"· ~{m}:{s:02d} rimanenti"
+        elapsed_str = ""
+        if elapsed > 0:
+            em, es = divmod(int(elapsed), 60)
+            elapsed_str = f"{em}:{es:02d} trascorsi"
+        self._container.markdown(
+            f"""
+            <div style='background:#FFFFFF; border:1px solid #DCE7FE; border-radius:12px;
+                        padding:12px 16px; margin:8px 0;'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <div style='font-weight:600; color:#0A0A0F;'>{self.title}</div>
+                    <div style='font-size:0.8rem; color:#4B5563; font-variant-numeric:tabular-nums;'>
+                        {done:,} / {self.total:,} · {elapsed_str} {eta_str}
+                    </div>
+                </div>
+                {'<div style=\"font-size:0.78rem; color:#6B7280; margin-top:4px;\">' + subtitle + '</div>' if subtitle else ''}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )

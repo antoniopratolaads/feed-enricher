@@ -4,24 +4,45 @@ import pandas as pd
 from anthropic import Anthropic
 
 from utils.state import init_state
-from utils.ui import apply_theme
+from utils.ui import (
+    apply_theme, api_key_banner, empty_state, guarded,
+    cost_estimate_card, diff_view, LoadingProgress,
+)
 from utils.enrichment import (
     enrich_dataframe, refine_product, chat_about_data, DEFAULT_MODEL,
     list_sectors, load_sector,
 )
 from utils.exporter import to_excel_bytes
+from utils import cache as enrich_cache
 
 init_state()
 apply_theme()
+api_key_banner()
 
-st.title("4. Enrichment AI (Claude)")
+st.title("Enrichment AI")
 st.caption("Classificazione Google Taxonomy + estrazione attributi + riscrittura titoli/descrizioni · Chat con Claude per affinare")
 
 if st.session_state.get("feed_df") is None:
-    st.warning("Carica prima un feed nella pagina **Upload Feed**.")
+    empty_state(
+        icon="📦",
+        title="Nessun feed caricato",
+        description="Carica prima un feed prodotto per poter lanciare l'enrichment AI. "
+                    "Puoi caricare un URL/file o usare il dataset demo.",
+        cta_label="Vai a Upload Feed →",
+        cta_page="client_pages/upload_feed.py",
+        cta_key="_empty_upload",
+    )
     st.stop()
 if not st.session_state.get("api_key"):
-    st.warning("Inserisci la Claude API Key in **0. Settings** o nella sidebar.")
+    empty_state(
+        icon="🔑",
+        title="API key non configurata",
+        description="L'enrichment AI richiede una chiave Claude. Configurala in Settings "
+                    "(salvata in locale, non inviata ai server).",
+        cta_label="Configura API key →",
+        cta_page="client_pages/settings.py",
+        cta_key="_empty_settings",
+    )
     st.stop()
 
 df = st.session_state["feed_df"]
@@ -58,22 +79,103 @@ if sector:
             st.markdown(f"**Parole vietate**: {', '.join(forb)}")
         st.caption(f"Editabile in `config/sectors/{sector}.yaml`")
 
-st.info(f"Costo stimato Sonnet ≈ ${(limit or len(df))*0.004:.2f} per {limit or len(df)} prodotti")
+n_to_process = limit or len(df)
 
-if st.button("Avvia enrichment", type="primary"):
-    progress = st.progress(0, text="Avvio...")
-    def cb(d, t): progress.progress(d/t, text=f"{d}/{t} prodotti")
+# Cache hit preview
+use_cache = st.checkbox(
+    "Usa cache (riusa enrichment precedenti per prodotti invariati)",
+    value=True,
+    help="Risparmia fino al 90% dei costi AI quando aggiorni un feed già processato. "
+         "Il match avviene su hash di id, title, description, brand, prezzo, attributi.",
+)
+
+cache_ns = f"{st.session_state.get('session_id','default')}__{sector or 'generic'}"
+cached_rows: dict = {}
+if use_cache:
     try:
-        enriched = enrich_dataframe(df, api_key=st.session_state["api_key"], model=model,
-                                     max_workers=workers, limit=limit or None, progress_callback=cb,
-                                     sector=sector, overwrite_title_description=overwrite)
-        st.session_state["enriched_df"] = enriched
+        preview_subset = df.head(n_to_process) if limit else df
+        cached_rows, _ = enrich_cache.get_cached(
+            preview_subset,
+            namespace="shared_v1",
+            model=model, sector=sector, provider="anthropic",
+        )
+    except Exception:
+        cached_rows = {}
+
+n_hit = len(cached_rows)
+n_miss = n_to_process - n_hit
+
+hit_rate_color = "#10B981" if n_hit > 0 else "#9CA3AF"
+st.markdown(
+    f"<div style='display:flex; gap:16px; font-size:0.82rem; color:#4B5563; margin:6px 0 12px;'>"
+    f"<span><span style='color:{hit_rate_color};'>●</span>&nbsp;Cache hit: <b>{n_hit}</b></span>"
+    f"<span><span style='color:#2F6FED;'>●</span>&nbsp;Da processare con AI: <b>{n_miss}</b></span>"
+    f"</div>",
+    unsafe_allow_html=True,
+)
+
+# Cost estimate — based only on miss (cache skips AI call)
+cost_estimate_card(n_miss, model)
+
+bcol1, bcol2 = st.columns([2, 1])
+launch = bcol1.button("Avvia enrichment", type="primary", use_container_width=True)
+if bcol2.button("Pulisci cache", use_container_width=True,
+                help="Forza re-enrichment di tutto il feed al prossimo run"):
+    enrich_cache.clear("shared_v1")
+    st.success("Cache pulita")
+    st.rerun()
+
+if launch:
+    with guarded("enrichment AI"):
+        if n_miss == 0 and n_hit > 0:
+            # Tutto in cache — ricostruisci direttamente
+            enriched_rows = df.head(n_to_process).copy() if limit else df.copy()
+            for idx, result in cached_rows.items():
+                for k, v in (result or {}).items():
+                    if v is not None:
+                        enriched_rows.at[idx, k] = v
+            enriched_rows["_enrichment_status"] = "cached"
+            st.session_state["enriched_df"] = enriched_rows
+        else:
+            with LoadingProgress("Enrichment AI in corso", total=n_miss or n_to_process) as lp:
+                def cb(d, t):
+                    lp.update(d, subtitle=f"{d}/{t} prodotti processati")
+
+                enriched = enrich_dataframe(
+                    df, api_key=st.session_state["api_key"], model=model,
+                    max_workers=workers, limit=limit or None, progress_callback=cb,
+                    sector=sector, overwrite_title_description=overwrite,
+                )
+
+            # Salva i risultati OK in cache per riuso futuro
+            if use_cache and "_enrichment_status" in enriched.columns:
+                try:
+                    good = enriched[enriched["_enrichment_status"] == "ok"]
+                    pairs = []
+                    for idx, row in good.iterrows():
+                        src = df.loc[idx].to_dict() if idx in df.index else row.to_dict()
+                        result = {k: row.get(k) for k in row.index
+                                  if k not in ("_enrichment_status",) and pd.notna(row.get(k))}
+                        pairs.append((src, result))
+                    enrich_cache.store(pairs, namespace="shared_v1",
+                                       model=model, sector=sector, provider="anthropic")
+                except Exception:
+                    pass
+
+            # Ripristina risultati cache nelle righe saltate
+            if cached_rows:
+                for idx, result in cached_rows.items():
+                    if idx in enriched.index:
+                        for k, v in (result or {}).items():
+                            if v is not None:
+                                enriched.at[idx, k] = v
+                        enriched.at[idx, "_enrichment_status"] = "cached"
+
+            st.session_state["enriched_df"] = enriched
         st.session_state["merged_df"] = None
         from utils.history import save_snapshot
         save_snapshot(st.session_state["session_id"], st.session_state)
-        st.success(f"Enrichment completato")
-    except Exception as e:
-        st.error(f"Errore: {e}")
+        st.success(f"Enrichment completato · {n_hit} da cache, {n_miss} elaborati")
 
 enriched = st.session_state.get("enriched_df")
 if enriched is None:
@@ -83,13 +185,57 @@ if enriched is None:
 # RISULTATI
 # ============================================================
 st.divider()
+
+# ============================================================
+# AZIONI POST-ENRICHMENT (undo + diff preview toggle)
+# ============================================================
+ac1, ac2, ac3 = st.columns([1, 1, 2])
+if ac1.button("↶ Undo enrichment",
+              help="Ripristina title/description originali dalle colonne _original",
+              use_container_width=True):
+    with guarded("undo enrichment"):
+        restored = enriched.copy()
+        for src, dst in (("title_original", "title"), ("description_original", "description")):
+            if src in restored.columns:
+                mask = restored[src].notna() & restored[src].astype(str).ne("")
+                restored.loc[mask, dst] = restored.loc[mask, src]
+        restored["_enrichment_status"] = "reverted"
+        st.session_state["enriched_df"] = restored
+        st.toast("Ripristinati i valori originali", icon="↶")
+        st.rerun()
+
+show_diff = ac2.toggle("📊 Diff prima/dopo", value=False,
+                       help="Mostra confronto side-by-side tra originale e versione AI")
+
 st.subheader("Risultati")
 ok = (enriched["_enrichment_status"] == "ok").sum()
+cached_n = (enriched["_enrichment_status"] == "cached").sum()
 errors = enriched["_enrichment_status"].astype(str).str.startswith("error").sum()
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 c1.metric("OK", int(ok))
-c2.metric("Errori", int(errors))
-c3.metric("Vuoti", len(enriched) - ok - errors)
+c2.metric("Da cache", int(cached_n))
+c3.metric("Errori", int(errors))
+c4.metric("Vuoti", len(enriched) - int(ok) - int(cached_n) - int(errors))
+
+# Diff preview for first N products that were actually modified
+if show_diff:
+    st.markdown("#### Anteprima diff (primi 10 prodotti modificati)")
+    if "title_original" not in enriched.columns:
+        st.caption("_Nessuna colonna `title_original` — l'enrichment non ha sovrascritto i titoli._")
+    else:
+        diffed = enriched[
+            enriched["title_original"].notna()
+            & (enriched["title"].astype(str) != enriched["title_original"].astype(str))
+        ].head(10)
+        if diffed.empty:
+            st.caption("_Nessun prodotto modificato in questo batch._")
+        for _, row in diffed.iterrows():
+            diff_view(
+                f"{row.get('id', '?')} · {row.get('brand', '')}".strip(" ·"),
+                row.get("title_original", ""),
+                row.get("title", ""),
+            )
+    st.divider()
 
 tabs = st.tabs(["🛒 Variante Google", "📘 Variante Meta", "🏷️ Tutti gli attributi"])
 
