@@ -74,7 +74,7 @@ st.divider()
 # ============================================================
 # TABS PER PROVIDER
 # ============================================================
-tab1, tab2, tab3 = st.tabs(["Anthropic Claude", "OpenAI", "Parametri & avanzate"])
+tab1, tab2, tab3, tab4 = st.tabs(["Anthropic Claude", "OpenAI", "Parametri & avanzate", "Prompt templates"])
 
 with tab1:
     st.markdown("#### Anthropic Claude")
@@ -170,6 +170,91 @@ with tab3:
     st.caption("Se imposti queste env vars all'avvio dell'app, sovrascrivono le chiavi salvate:")
     st.code("export ANTHROPIC_API_KEY='sk-ant-...'\nexport OPENAI_API_KEY='sk-proj-...'", language="bash")
 
+with tab4:
+    from utils import prompts as _prompts
+    from utils.enrichment import list_sectors as _list_sectors, get_default_base_prompt
+
+    st.markdown("#### Prompt templates")
+    st.caption(
+        "Override del system prompt per settore. Se non esiste un template per il settore "
+        "scelto in Enrichment, viene usato il prompt base di default."
+    )
+
+    existing_sectors = list(_prompts.list_sectors())
+    yaml_sectors = list(_list_sectors())
+    all_choices = sorted(set(existing_sectors + yaml_sectors + ["_default"]))
+
+    sector_choice = st.selectbox(
+        "Settore",
+        options=all_choices,
+        index=all_choices.index("_default") if "_default" in all_choices else 0,
+        help="Usa `_default` per override globale, oppure un nome settore (es. `abbigliamento`).",
+        key="_prompt_sector",
+    )
+
+    versions = _prompts.list_versions(sector_choice)
+    active = _prompts.get_active(sector_choice)
+
+    if versions:
+        st.markdown(f"**Versioni salvate** ({len(versions)})")
+        for v in reversed(versions[-10:]):  # show last 10
+            is_active = active and v["version"] == active["version"]
+            badge = "✅ attiva" if is_active else ""
+            with st.expander(
+                f"v{v['version']} · {v.get('created_at','?')} · {v.get('note','')} {badge}",
+                expanded=False,
+            ):
+                st.code(v["body"][:2000] + ("... [tronc.]" if len(v["body"]) > 2000 else ""),
+                        language="markdown")
+                vc1, vc2, vc3 = st.columns(3)
+                if vc1.button("Attiva", key=f"activate_{sector_choice}_{v['version']}",
+                              disabled=is_active, use_container_width=True):
+                    _prompts.set_active(sector_choice, v["version"])
+                    st.toast(f"Versione {v['version']} attivata", icon="✅")
+                    st.rerun()
+                if vc2.button("Carica in editor", key=f"load_{sector_choice}_{v['version']}",
+                              use_container_width=True):
+                    st.session_state["_prompt_editor_body"] = v["body"]
+                    st.session_state["_prompt_editor_note"] = v.get("note", "")
+                    st.rerun()
+                if vc3.button("Elimina", key=f"delete_{sector_choice}_{v['version']}",
+                              disabled=is_active, use_container_width=True,
+                              help="Non puoi eliminare la versione attiva"):
+                    _prompts.delete_version(sector_choice, v["version"])
+                    st.rerun()
+
+    st.divider()
+    st.markdown("**Nuova versione**")
+
+    # If no editor body set yet, pre-fill with default base or last active
+    if "_prompt_editor_body" not in st.session_state:
+        if active:
+            st.session_state["_prompt_editor_body"] = active["body"]
+        else:
+            st.session_state["_prompt_editor_body"] = get_default_base_prompt()
+
+    note = st.text_input("Nota (cosa cambia in questa versione)",
+                         value=st.session_state.get("_prompt_editor_note", ""),
+                         placeholder="es. titoli più aggressivi, enfasi su taglie")
+    body = st.text_area(
+        "System prompt",
+        value=st.session_state.get("_prompt_editor_body", ""),
+        height=360,
+        help="Markdown supportato. Mantieni la struttura JSON finale coi nomi UFFICIALI Google/Meta.",
+    )
+
+    pc1, pc2, pc3 = st.columns([1, 1, 3])
+    if pc1.button("Salva nuova versione", type="primary", use_container_width=True,
+                  disabled=not body.strip()):
+        ver = _prompts.save_version(sector_choice, body, note=note.strip())
+        st.toast(f"Salvata v{ver} · attivata", icon="✨")
+        st.session_state["_prompt_editor_note"] = ""
+        st.rerun()
+    if pc2.button("Reset a default", use_container_width=True):
+        st.session_state["_prompt_editor_body"] = get_default_base_prompt()
+        st.session_state["_prompt_editor_note"] = ""
+        st.rerun()
+
 st.divider()
 
 # ============================================================
@@ -221,3 +306,4 @@ with st.expander("Come funziona il fallback tra provider"):
     L'enrichment usa il provider impostato come **predefinito** (sopra). Se la chiave manca, prova l'altro provider configurato.
     Puoi cambiare provider al volo nella pagina Enrichment AI senza ripassare da Settings.
     """)
+

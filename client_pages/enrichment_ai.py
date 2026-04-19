@@ -276,6 +276,73 @@ dc2.download_button("CSV arricchito", enriched.to_csv(index=False).encode("utf-8
                      "feed_enriched.csv", "text/csv", use_container_width=True)
 
 # ============================================================
+# QUALITY — taxonomy suggestions + spell check
+# ============================================================
+with st.expander("🧭 Quality post-enrichment (taxonomy + spell check)", expanded=False):
+    qc1, qc2 = st.columns(2)
+
+    with qc1:
+        st.markdown("**Taxonomy autocomplete**")
+        st.caption("Suggerisce `google_product_category` via fuzzy match sulla tassonomia ufficiale Google.")
+        if st.button("Suggerisci categorie mancanti", key="_tax_suggest"):
+            from utils.taxonomy import suggest_bulk
+            missing = enriched[
+                enriched.get("google_product_category", "").astype(str).str.strip().eq("")
+            ].head(30)
+            if missing.empty:
+                st.info("Tutti i prodotti hanno già `google_product_category`.")
+            else:
+                with st.spinner(f"Matching su {len(missing)} prodotti..."):
+                    suggestions = suggest_bulk(
+                        missing["title"].fillna("").astype(str),
+                        missing.get("brand", "").fillna("").astype(str) if "brand" in missing.columns else [""] * len(missing),
+                    )
+                # Present table
+                rows = []
+                for (idx, row), sug in zip(missing.iterrows(), suggestions):
+                    rows.append({
+                        "id": row.get("id", ""),
+                        "title": str(row.get("title", ""))[:60],
+                        "suggerimento": sug["path"] if sug else "—",
+                        "score": sug["score"] if sug else 0,
+                        "_idx": idx,
+                    })
+                suggest_df = pd.DataFrame(rows)
+                st.dataframe(suggest_df.drop(columns=["_idx"]),
+                              use_container_width=True, height=320)
+
+                if st.button("Applica suggerimenti (score ≥ 60)", key="_tax_apply"):
+                    applied = 0
+                    for r in rows:
+                        if r["score"] >= 60 and r["suggerimento"] != "—":
+                            enriched.at[r["_idx"], "google_product_category"] = r["suggerimento"]
+                            applied += 1
+                    st.session_state["enriched_df"] = enriched
+                    st.success(f"Applicati {applied} suggerimenti.")
+                    st.rerun()
+
+    with qc2:
+        st.markdown("**Spell check italiano**")
+        st.caption("Flagga parole non riconosciute in `title` e `description` (possibili hallucinations).")
+        if st.button("Esegui spell check (primi 500)", key="_spell_run"):
+            from utils.spell_check import check_dataframe
+            with st.spinner("Analizzo testi..."):
+                issues = check_dataframe(enriched, cols=("title", "description"), limit=500)
+            if not issues:
+                st.success("Nessun errore rilevato (o dizionario IT non disponibile).")
+            else:
+                st.warning(f"{len(issues)} possibili errori trovati")
+                df_issues = pd.DataFrame([{
+                    "riga": i.row_idx,
+                    "campo": i.column,
+                    "parola": i.word,
+                    "suggerimento": i.suggestion or "—",
+                } for i in issues[:200]])
+                st.dataframe(df_issues, use_container_width=True, height=320)
+                if len(issues) > 200:
+                    st.caption(f"_Mostrati primi 200 su {len(issues)} totali._")
+
+# ============================================================
 # REFINEMENT — applica istruzione custom a un sottoinsieme
 # ============================================================
 st.divider()

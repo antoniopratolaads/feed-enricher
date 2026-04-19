@@ -621,6 +621,46 @@ def page_header(title: str, subtitle: str = ""):
         st.caption(subtitle)
 
 
+def onboarding_card(force: bool = False):
+    """First-run tutorial shown above the Home hero.
+
+    Hides itself once the user clicks 'Ho capito'. Tracks state in
+    session_state['_onboarded']. Pass `force=True` to display unconditionally
+    (used from a 'Rivedi tutorial' button).
+    """
+    dismissed = st.session_state.get("_onboarded", False)
+    if dismissed and not force:
+        return
+    st.markdown(
+        """
+        <div style='background:linear-gradient(135deg, #EEF4FF 0%, #FAFAFB 100%);
+                    border:1px solid #DCE7FE; border-radius:16px; padding:20px 24px;
+                    margin-bottom:20px; position:relative; overflow:hidden;'>
+            <div style='font-size:0.72rem; color:#2F6FED; font-weight:700;
+                        letter-spacing:0.08em; text-transform:uppercase; margin-bottom:6px;'>
+                Benvenuto
+            </div>
+            <div style='font-size:1.15rem; font-weight:700; color:#0A0A0F; margin-bottom:8px;'>
+                Come funziona Feed Enricher Pro
+            </div>
+            <ol style='margin:6px 0 12px 18px; color:#4B5563; font-size:0.88rem; line-height:1.8;'>
+                <li><b>Settings</b> — incolla la tua API key Claude (costa, vai piano)</li>
+                <li><b>Upload Feed</b> — carica XML/CSV da URL o file (Shopify/Magento/WooCommerce)</li>
+                <li><b>Enrichment AI</b> — scegli settore e lancia: titoli, descrizioni, attributi</li>
+                <li><b>Catalog Optimizer</b> — scarica TSV Google + Meta pronti all'upload</li>
+            </ol>
+            <div style='color:#6B7280; font-size:0.78rem; margin-top:6px;'>
+                Suggerimento: prova subito con <b>Carica demo</b> sotto (500 prodotti finti).
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Ho capito · nascondi", key="_onboarding_dismiss"):
+        st.session_state["_onboarded"] = True
+        st.rerun()
+
+
 def api_key_banner():
     """Show warning banner on top of page if Anthropic API key missing.
 

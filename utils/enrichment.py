@@ -112,6 +112,11 @@ REGOLE FONDAMENTALI:
 - Rispondi SOLO con JSON, senza markdown."""
 
 
+def get_default_base_prompt() -> str:
+    """Expose the current base system prompt for the prompt editor UI."""
+    return SYSTEM_PROMPT_BASE
+
+
 def _extract_json(text: str) -> dict:
     """Estrae JSON anche se wrappato in markdown."""
     text = text.strip()
@@ -125,7 +130,21 @@ def _extract_json(text: str) -> dict:
 
 
 def _build_system_prompt(sector_name: str = "") -> str:
-    """Compone il system prompt: base + brief settoriale dal YAML."""
+    """Compone il system prompt.
+
+    Priorità:
+      1. Template utente attivo (da utils/prompts.py) per questo sector → usato tale-e-quale
+      2. BASE + brief settoriale YAML (default)
+    """
+    # 1. Override utente via prompt versioning
+    try:
+        from . import prompts as _prompts
+        body = _prompts.get_template_body(sector_name or "_default")
+        if body:
+            return body
+    except ImportError:
+        pass
+
     parts = [SYSTEM_PROMPT_BASE]
     if sector_name:
         sector = load_sector(sector_name)

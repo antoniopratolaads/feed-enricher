@@ -34,6 +34,13 @@ def set_project_name(session_id: str, name: str, description: str = ""):
     }
     _save_projects_meta(data)
 
+    # Mirror to SQLite index
+    try:
+        from . import sqlite_store
+        sqlite_store.upsert_session(session_id, project_name=name.strip())
+    except Exception:
+        pass
+
 
 def get_project_name(session_id: str) -> str:
     data = _load_projects_meta()
@@ -91,6 +98,13 @@ def log_event(session_id: str, event: str, payload: Optional[dict] = None):
     }
     with (d / "history.jsonl").open("a") as f:
         f.write(json.dumps(line, default=str) + "\n")
+
+    # Mirror to SQLite index (best-effort; never blocks JSONL write)
+    try:
+        from . import sqlite_store
+        sqlite_store.log_event(session_id, event, payload)
+    except Exception:
+        pass
 
 
 def read_history(session_id: str) -> list[dict]:

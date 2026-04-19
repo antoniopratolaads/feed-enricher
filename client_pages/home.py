@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 
 from utils.state import init_state, current_df
-from utils.ui import apply_theme, api_key_banner
+from utils.ui import apply_theme, api_key_banner, onboarding_card
 from utils.history import init_session, save_snapshot, log_event, get_project_name, get_project_info
 from utils.config import load_config
 from utils.demo_data import load_demo_into_session
@@ -18,6 +18,9 @@ if "config" not in st.session_state:
         st.session_state["api_key"] = st.session_state["config"]["anthropic_api_key"]
 
 cfg = st.session_state.get("config", {})
+
+# First-run onboarding (dismissable)
+onboarding_card()
 
 # API key warning banner (renders only when no key configured)
 api_key_banner()

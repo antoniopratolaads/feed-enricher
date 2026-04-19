@@ -244,6 +244,76 @@ if meta_df is not None:
                 "Da file di dati. Meta supporta CSV, TSV, XML, Google Sheets.")
 
 # ============================================================
+# EXPORT DIFF — delta vs ultima export
+# ============================================================
+from utils import export_diff
+
+st.divider()
+st.subheader("🔄 Export diff — solo prodotti modificati dall'ultimo export")
+st.caption(
+    "Riduci le upload incrementali a Google Merchant / Meta caricando solo prodotti nuovi "
+    "o modificati rispetto all'ultimo snapshot salvato."
+)
+
+if "session_id" not in st.session_state:
+    st.info("Diff disponibile solo dentro una sessione (salvataggio progetto richiesto).")
+else:
+    session_id = st.session_state["session_id"]
+    dc1, dc2 = st.columns(2)
+
+    if google_df is not None:
+        with dc1:
+            st.markdown("**Google**")
+            diff = export_diff.compute_diff(session_id, "google", google_df)
+            if not diff["has_snapshot"]:
+                st.caption("_Nessuno snapshot precedente. Crea il baseline ora._")
+            else:
+                m = st.columns(3)
+                m[0].metric("Nuovi", len(diff["added"]))
+                m[1].metric("Modificati", len(diff["modified"]))
+                m[2].metric("Rimossi", len(diff["removed"]))
+                if not diff["delta_df"].empty:
+                    delta_tsv = diff["delta_df"].to_csv(index=False, sep="\t").encode("utf-8")
+                    st.download_button(
+                        "⬇️ Delta TSV (Google)",
+                        delta_tsv,
+                        file_name=f"google_delta_{len(diff['delta_df'])}items.tsv",
+                        mime="text/tab-separated-values",
+                        use_container_width=True,
+                    )
+            if st.button("Salva snapshot baseline (Google)", key="_snap_google",
+                          use_container_width=True):
+                export_diff.save_snapshot(session_id, "google", google_df)
+                st.toast("Baseline Google aggiornato", icon="📸")
+                st.rerun()
+
+    if meta_df is not None:
+        with dc2:
+            st.markdown("**Meta**")
+            diff = export_diff.compute_diff(session_id, "meta", meta_df)
+            if not diff["has_snapshot"]:
+                st.caption("_Nessuno snapshot precedente. Crea il baseline ora._")
+            else:
+                m = st.columns(3)
+                m[0].metric("Nuovi", len(diff["added"]))
+                m[1].metric("Modificati", len(diff["modified"]))
+                m[2].metric("Rimossi", len(diff["removed"]))
+                if not diff["delta_df"].empty:
+                    delta_csv = diff["delta_df"].to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "⬇️ Delta CSV (Meta)",
+                        delta_csv,
+                        file_name=f"meta_delta_{len(diff['delta_df'])}items.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+            if st.button("Salva snapshot baseline (Meta)", key="_snap_meta",
+                          use_container_width=True):
+                export_diff.save_snapshot(session_id, "meta", meta_df)
+                st.toast("Baseline Meta aggiornato", icon="📸")
+                st.rerun()
+
+# ============================================================
 # DOWNLOAD BUNDLE FINALE
 # ============================================================
 st.divider()

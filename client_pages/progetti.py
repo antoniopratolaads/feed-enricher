@@ -110,6 +110,41 @@ if events:
 st.divider()
 
 # ============================================================
+# INDICE SQLITE (riepilogo veloce)
+# ============================================================
+from utils import sqlite_store as _sqlite
+
+with st.expander("🗂️ Indice SQLite (ricerca eventi cross-sessione)", expanded=False):
+    ic1, ic2, ic3 = st.columns([2, 1, 1])
+    if ic1.button("Rebuild indice da JSONL", help="Rescansiona tutte le sessioni e reindicizza"):
+        with st.spinner("Rebuilding..."):
+            n = _sqlite.rebuild_from_jsonl()
+        st.toast(f"Reindicizzati {n} eventi", icon="✅")
+
+    s = _sqlite.stats()
+    ic2.metric("Sessioni indicizzate", s["sessions"])
+    ic3.metric("Eventi totali", s["events"])
+
+    st.caption(f"DB path: `{s['db_path']}`")
+
+    search_q = st.text_input("Cerca sessione (project_name o session_id)",
+                              placeholder="es. Nike, 2026-04")
+    if search_q:
+        results = _sqlite.search_sessions(q=search_q, limit=20)
+        if not results:
+            st.info("Nessun risultato.")
+        else:
+            st.dataframe(
+                pd.DataFrame([{
+                    "session_id": r["session_id"],
+                    "project_name": r["project_name"] or "—",
+                    "updated_at": r["updated_at"],
+                    "enriched": "✓" if r["has_enrichment"] else "",
+                } for r in results]),
+                use_container_width=True, height=240,
+            )
+
+# ============================================================
 # TUTTI I PROGETTI
 # ============================================================
 st.markdown("### Tutti i progetti")
