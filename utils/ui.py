@@ -983,6 +983,10 @@ class LoadingProgress:
         if elapsed > 0:
             em, es = divmod(int(elapsed), 60)
             elapsed_str = f"{em}:{es:02d} trascorsi"
+        subtitle_html = (
+            f"<div style='font-size:0.78rem; color:#6B7280; margin-top:4px;'>{subtitle}</div>"
+            if subtitle else ""
+        )
         self._container.markdown(
             f"""
             <div style='background:#FFFFFF; border:1px solid #DCE7FE; border-radius:12px;
@@ -993,7 +997,7 @@ class LoadingProgress:
                         {done:,} / {self.total:,} · {elapsed_str} {eta_str}
                     </div>
                 </div>
-                {'<div style=\"font-size:0.78rem; color:#6B7280; margin-top:4px;\">' + subtitle + '</div>' if subtitle else ''}
+                {subtitle_html}
             </div>
             """,
             unsafe_allow_html=True,
