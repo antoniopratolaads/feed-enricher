@@ -31,6 +31,7 @@ client_pages = [
     st.Page("client_pages/upload_feed.py",     title="Upload Feed",         icon=":material/upload_file:"),
     st.Page("client_pages/enrichment_ai.py",   title="Enrichment AI",       icon=":material/bolt:"),
     st.Page("client_pages/scarica_catalogo.py", title="Scarica Catalogo",   icon=":material/download:"),
+    st.Page("client_pages/clienti.py",         title="Clienti",             icon=":material/groups:"),
     st.Page("client_pages/progetti.py",        title="Progetti",            icon=":material/folder:"),
     st.Page("client_pages/settings.py",        title="Settings",            icon=":material/settings:"),
 ]

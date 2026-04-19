@@ -217,6 +217,44 @@ if launch:
         st.session_state["merged_df"] = None
         from utils.history import save_snapshot
         save_snapshot(st.session_state["session_id"], st.session_state)
+
+        # If driven from a Client feed (Clienti page handoff), remove enriched
+        # keys from the pending queue and merge into that feed's cumulative
+        # enriched.parquet so subsequent syncs know they're done.
+        client_slug = st.session_state.get("_enrich_client_slug")
+        feed_slug = st.session_state.get("_enrich_feed_slug")
+        if client_slug and feed_slug:
+            try:
+                from utils import clients as _cs
+                from utils import feed_diff as _fd
+                final = st.session_state.get("enriched_df")
+                if final is not None and not final.empty:
+                    strat = (_cs.get_feed(client_slug, feed_slug) or {}).get("id_strategy", "hierarchical")
+                    enriched_keys = [
+                        _fd.product_key(r.to_dict(), strategy=strat)
+                        for _, r in final.iterrows()
+                    ]
+                    removed_cnt = _cs.remove_pending(client_slug, feed_slug, enriched_keys)
+                    # Merge into cumulative enriched
+                    prev = _cs.load_enriched(client_slug, feed_slug)
+                    if prev is None or prev.empty:
+                        merged = final.copy()
+                    else:
+                        # Drop overlapping keys from prev then concat
+                        prev_keys = [
+                            _fd.product_key(r.to_dict(), strategy=strat)
+                            for _, r in prev.iterrows()
+                        ]
+                        mask = [k not in enriched_keys for k in prev_keys]
+                        merged = pd.concat([prev[mask], final], ignore_index=True)
+                    _cs.save_enriched(client_slug, feed_slug, merged)
+                    _cs.log_event(client_slug, feed_slug, "enrichment_applied",
+                                  {"enriched": int(len(final)), "removed_from_pending": removed_cnt})
+                    st.info(f"💼 {removed_cnt} prodotti rimossi dalla coda · "
+                            f"enriched.parquet del feed aggiornato")
+            except Exception as _e:  # noqa
+                st.warning(f"Hook client-feed non riuscito (non critico): {_e}")
+
         st.success(f"Enrichment completato · {n_hit} da cache, {n_miss} elaborati")
 
 enriched = st.session_state.get("enriched_df")
