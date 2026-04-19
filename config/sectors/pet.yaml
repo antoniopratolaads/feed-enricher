@@ -1,0 +1,206 @@
+# Best practice PET (Animali domestici)
+# Cibo, snack, accessori, lettiere, giocattoli, integratori, farmaci veterinari.
+# Fonti: GMC animal supplies attribute guide 2026.
+
+sector: pet
+display_name: Pet Supplies / Animali domestici
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {linea} {specie_animale} {tipologia} {gusto_varieta} {formato}"
+  formula_examples:
+    - "Royal Canin Mini Adult cibo secco cane piccole razze 8 kg"
+    - "Purina Gourmet Gold Mousse gatto adulto manzo 24x85g"
+    - "Trixie Cuscino ortopedico cane 90x65cm beige"
+    - "Ferplast AtlasCar 20 trasportino gatto/cane piccolo 58x37x32cm"
+    - "Advantix spot-on cane 10-25kg 4 pipette antiparassitario"
+  rules:
+    - "Specie animale OBBLIGATORIA (cane / gatto / uccello / pesce / roditore / rettile)"
+    - "Età / taglia animale per food e accessori (puppy / adult / senior; small / medium / large breed)"
+    - "Gusto / ingrediente principale per food (manzo, pollo, salmone)"
+    - "Formato SEMPRE (peso secco, n. buste, ml)"
+    - "Per antiparassitari: fascia peso precisa"
+    - "Tra 70 e 150 char"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "naturale"  # usa 'con ingredienti naturali' se documentato
+    - "cura"
+    - "sconfigge"
+    - "migliore"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è + specie target + età/taglia"
+    - "Blocco composizione / ingredienti (per food)"
+    - "Componenti analitici (% proteine, grassi, fibra, ceneri)"
+    - "Additivi + integrazioni (taurina, omega-3, glucosamina)"
+    - "Dosaggio consigliato per peso animale"
+    - "Conservazione"
+    - "WARNING se medicinale veterinario (solo sotto prescrizione)"
+  length:
+    min_chars: 250
+    ideal_chars: 600
+    max_chars: 5000
+  tone:
+    - "Informativo, tecnico, vet-friendly"
+    - "Cita percentuali (proteine grezze 32%, grassi 18%)"
+    - "Dosaggio chiaro (X g/kg peso corporeo al giorno)"
+  must_include:
+    - "Specie + taglia/età target"
+    - "Composizione / ingredienti"
+    - "Componenti analitici (% macronutrienti)"
+    - "Dosaggio consigliato"
+    - "Conservazione"
+    - "Operatore alimentare / fabbricante (reg EU 767/2009)"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: animal_species
+    values:
+      - cane
+      - gatto
+      - piccoli mammiferi (coniglio, criceto, porcellino d'india)
+      - uccelli
+      - pesci
+      - rettili
+      - cavallo
+      - furetto
+
+  - name: life_stage
+    values:
+      - puppy / kitten
+      - junior
+      - adult
+      - senior
+      - all life stages
+
+  - name: animal_size
+    values:
+      - mini / small breed (<10kg cani)
+      - medium breed (10-25kg)
+      - large breed (25-45kg)
+      - giant breed (>45kg)
+
+  - name: flavor / main_ingredient
+    common_values:
+      - pollo
+      - manzo
+      - salmone / pesce
+      - agnello
+      - tacchino
+      - anatra
+      - cavallo
+      - mix / misto
+      - vegetariano
+
+  - name: diet_type
+    values:
+      - complete (monodieta)
+      - complementary (snack/integratore)
+      - grain-free
+      - hypoallergenic
+      - prescription diet (solo Rx veterinaria)
+
+  - name: quantity
+    examples: [2 kg, 8 kg, 15 kg, 85 g, 400 g, 24 buste, 12 lattine]
+
+  - name: health_claim
+    warning: "USA solo claim documentati (reg EU 429/2016 veterinari)"
+    allowed_examples:
+      - "con omega-3 per pelo lucido"
+      - "con prebiotici per equilibrio intestinale"
+    forbidden_examples:
+      - "cura la dermatite"
+      - "risolve il prurito"
+      - "elimina il diabete"
+
+  - name: product_highlight
+    examples:
+      - "Crocchette per cani adulti di piccola taglia (<10kg)"
+      - "Proteine grezze 32%, grassi 18%, fibra 2.5%"
+      - "Con glucosamina e condroitina per articolazioni"
+      - "Formato economico 8 kg (dura circa 60 giorni per cane 5kg)"
+      - "Senza coloranti, conservanti artificiali, OGM"
+      - "Prodotto in Francia, dagli esperti Royal Canin"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Animals & Pet Supplies"
+  common_paths:
+    - "Animals & Pet Supplies > Pet Supplies > Dog Supplies > Dog Food"
+    - "Animals & Pet Supplies > Pet Supplies > Dog Supplies > Dog Treats"
+    - "Animals & Pet Supplies > Pet Supplies > Dog Supplies > Dog Collars"
+    - "Animals & Pet Supplies > Pet Supplies > Dog Supplies > Dog Beds"
+    - "Animals & Pet Supplies > Pet Supplies > Cat Supplies > Cat Food"
+    - "Animals & Pet Supplies > Pet Supplies > Cat Supplies > Cat Litter"
+    - "Animals & Pet Supplies > Pet Supplies > Cat Supplies > Cat Toys"
+    - "Animals & Pet Supplies > Pet Supplies > Small Animal Supplies > Small Animal Food"
+    - "Animals & Pet Supplies > Pet Supplies > Bird Supplies > Bird Food"
+    - "Animals & Pet Supplies > Pet Supplies > Fish Supplies > Fish Food"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: sfondo bianco, vista frontale packaging o prodotto"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: back packaging con composizione, animale con prodotto, dettagli"
+  - "Per food: mostra crocchette fuori pack (additional)"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required: true
+    note: "EAN-13 obbligatorio su pack alimentare (reg EU 767/2009)"
+  mpn:
+    optional: true
+  item_group_id:
+    note: "Raggruppa varianti gusto/formato del medesimo prodotto"
+
+# ============================================================
+# VETERINARY PRODUCTS (MEDICAL DEVICES / DRUGS)
+# ============================================================
+veterinary_compliance:
+  - "Farmaci veterinari con obbligo ricetta: vietati su GMC senza certificazione"
+  - "Antiparassitari OTC (es. Frontline, Advantix): OK ma descrivi uso responsabile"
+  - "NO promesse terapeutiche senza autorizzazione AIFA/EMA"
+  - "Integratori: usare claim sintomatici autorizzati ('contribuisce a...')"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "specie (cane / gatto / altri)"
+  custom_label_1: "eta (puppy / adult / senior)"
+  custom_label_2: "categoria (food / snack / accessorio / cura)"
+  custom_label_3: "fascia_prezzo (entry / mid / premium / vet)"
+  custom_label_4: "performance (bestseller / steady / slow / clearance)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Specie + taglia + età molto chiari"
+    - "Percentuali macronutrienti precise"
+    - "Cita esigenze specifiche (sensitive, renal, joint, weight control)"
+    - "Dosaggio pratico (es. 'circa 85g/giorno per cane 5kg adulto')"
+  dont:
+    - "NO claim terapeutici non autorizzati ('cura' qualcosa)"
+    - "NO antropomorfizzazione eccessiva ('il tuo migliore amico')"
+    - "NO 'tutto naturale' se ha additivi"
+    - "NO 'come home cooking' senza evidenza"
+    - "NO suggerimenti dietetici contrari a linee vet (es. diete monoproteiche senza supervisione)"

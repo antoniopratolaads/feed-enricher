@@ -1,0 +1,201 @@
+# Best practice GIOIELLI & OROLOGI (Jewelry & Watches)
+# Anelli, collane, bracciali, orecchini, orologi, gemme, fedi.
+# Fonti: GMC jewelry guide 2026, hallmark EU direttiva 2011.
+
+sector: gioielli
+display_name: Gioielli & Orologi / Jewelry & Watches
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {collezione} {tipologia} {metallo} {pietra} {taglia_misura}"
+  formula_examples:
+    - "Pandora Moments Anello Corona oro 14kt zirconia cubica misura 54"
+    - "Bulgari Serpenti Tubogas orologio acciaio quadrante nero 35mm"
+    - "Swarovski Angelic Collier cristallo bianco placcato rodio"
+    - "Dodo Madonnina ciondolo oro rosa 9kt smalto bianco"
+    - "Rolex Submariner Date ref 126610LN oro acciaio 41mm"
+  rules:
+    - "Brand + collezione (es. 'Pandora Moments', 'Bulgari Serpenti')"
+    - "Tipologia chiara (anello, collier, orecchini, pendente, bracciale, orologio)"
+    - "Metallo con titolo (oro 18kt, oro 14kt, argento 925, platino 950)"
+    - "Pietra principale se presente (diamante 0.25ct, zaffiro, zirconia)"
+    - "Misura (anelli EU 54, collane cm, orologi mm cassa)"
+    - "Tra 70 e 150 char"
+    - "NO claim di valore ('prezioso', 'esclusivo') senza certificazione"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "esclusivo"  # senza certificazione limited edition
+    - "prezioso"  # qualificatore vago
+    - "unico al mondo"
+    - "migliore"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cos'è + linea/collezione + materiale principale"
+    - "Blocco materiali (metallo + titolo + finitura)"
+    - "Blocco pietre (tipo, taglio, peso in carati, colore, purezza)"
+    - "Blocco dimensioni (misura anello, lunghezza catena, diametro cassa per orologi)"
+    - "Blocco chiusura (per collane/bracciali/orecchini)"
+    - "Blocco cura (panno specifico, pulizia ultrasuoni OK/NO)"
+    - "Blocco certificazioni (punzone, hallmark, GIA per diamanti)"
+    - "Blocco provenienza + garanzia"
+  length:
+    min_chars: 250
+    ideal_chars: 600
+    max_chars: 5000
+  tone:
+    - "Elegante ma specifico: '0.25ct diamante colore G VS1' non 'diamante di qualità'"
+    - "Cita punzoni ufficiali (750 per oro 18kt, 925 per argento sterling)"
+    - "Peso in grammi per metallo, carati per pietre"
+  must_include:
+    - "Metallo + titolo (18kt, 14kt, 9kt, 925)"
+    - "Peso in grammi del gioiello"
+    - "Pietre: tipo, peso (ct), taglio, colore, purezza (per diamanti)"
+    - "Dimensioni (misura anello in EU, cm collana, mm cassa)"
+    - "Chiusura (a scatto, moschettone, innesto)"
+    - "Certificazioni se diamante >0.30ct (GIA / IGI / HRD)"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: material
+    common_values:
+      - oro 18kt (750)
+      - oro 14kt (585)
+      - oro 9kt (375)
+      - argento sterling 925
+      - platino 950
+      - acciaio inossidabile
+      - oro rosa / bianco / giallo
+      - placcato oro / rodio
+      - titanio
+      - bronzo / ottone
+
+  - name: stone
+    fields:
+      - stone_type (diamante, rubino, zaffiro, smeraldo, perla, zirconia, topazio, ametista, opale)
+      - stone_carat_weight (es. 0.25ct)
+      - stone_color (es. G, H, I per diamanti)
+      - stone_clarity (es. VVS1, VS1, SI1 per diamanti)
+      - stone_cut (es. brillante, princess, cuore)
+
+  - name: size
+    note: "Per anelli misura EU italiana (es. 14, 16, 54, 58)"
+    examples:
+      - "Anelli: EU 10, 12, 14, 16, 18, 20 (o 48, 52, 56...)"
+      - "Collier: 38, 42, 45, 50, 55, 60 cm"
+      - "Bracciali: 17, 18, 19 cm"
+      - "Orologi: 28mm, 32mm, 36mm, 40mm, 44mm (diametro cassa)"
+
+  - name: gender
+    values: [male, female, unisex]
+
+  - name: certification
+    examples:
+      - "GIA (Gemological Institute of America)"
+      - "IGI (International Gemological Institute)"
+      - "HRD (Antwerp Diamond Institute)"
+      - "Punzone UIBM (Italia)"
+      - "Hallmark UK (per oggetti importati)"
+
+  - name: finish
+    values: [lucido, spazzolato, satinato, opaco, martellato, zigrinato]
+
+  - name: water_resistance
+    note: "Solo per orologi"
+    values:
+      - "3 ATM (30m): resistente agli spruzzi"
+      - "5 ATM (50m): doccia"
+      - "10 ATM (100m): nuoto superficiale"
+      - "20 ATM (200m): immersioni amatoriali"
+      - "30 ATM (300m): immersioni professionali"
+
+  - name: product_highlight
+    examples:
+      - "Oro rosa 9 carati (375) punzonato"
+      - "Diamante centrale 0.25ct colore G, purezza VS1, taglio brillante"
+      - "Circonferenza 54 (diametro interno 17.2mm)"
+      - "Peso totale gioiello 2.4 g"
+      - "Chiusura a scatto con sicurezza"
+      - "Fornito con certificato di garanzia e confezione originale"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Apparel & Accessories > Jewelry"
+  common_paths:
+    - "Apparel & Accessories > Jewelry > Rings"
+    - "Apparel & Accessories > Jewelry > Necklaces"
+    - "Apparel & Accessories > Jewelry > Bracelets"
+    - "Apparel & Accessories > Jewelry > Earrings"
+    - "Apparel & Accessories > Jewelry > Watches"
+    - "Apparel & Accessories > Jewelry > Watch Accessories"
+    - "Apparel & Accessories > Jewelry > Brooches & Lapel Pins"
+    - "Apparel & Accessories > Jewelry > Charms & Pendants"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: sfondo bianco o neutro molto chiaro"
+  - "Illuminazione diffusa senza riflessi eccessivi"
+  - "Min 500x500 (GMC dal 30 giugno 2026), ideale 2000x2000 per zoom"
+  - "additional_image_link: vista laterale, indossato (per proporzione), dettaglio pietra, chiusura"
+  - "NO watermark sul gioiello"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    optional: true
+    note: "Gioielli personalizzati o su misura spesso senza EAN — usa MPN"
+  mpn:
+    required: true
+    note: "Codice articolo brand — critico per gioielli branded"
+  item_group_id:
+    note: "Raggruppa varianti misura/metallo del medesimo gioiello"
+
+# ============================================================
+# COMPLIANCE (EU + IT)
+# ============================================================
+compliance:
+  - "Oggetti oro/argento/platino >1g = punzone obbligatorio (D.Lgs 251/1999)"
+  - "Diamanti: Kimberley Process Certificate of Origin obbligatorio per grezzi"
+  - "Per orologi: cita se movimento svizzero (Swiss Made) solo se >50% made in CH"
+  - "Evita claim 'antico' / 'vintage' se non certificato da perito"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "tipologia (anello / collana / bracciale / orecchini / orologio)"
+  custom_label_1: "metallo (oro18 / oro14 / oro9 / argento / acciaio)"
+  custom_label_2: "fascia_prezzo (entry <200 / mid 200-1000 / premium 1000-5000 / luxury 5000+)"
+  custom_label_3: "occasione (everyday / regalo / cerimonia / fidanzamento)"
+  custom_label_4: "performance (bestseller / steady / slow / new_collection)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Specifica TUTTO tecnicamente (titolo metallo, carati, colore, purezza)"
+    - "Cita punzoni e certificazioni"
+    - "Dimensioni esatte (misura, cm, mm)"
+    - "Peso in grammi"
+  dont:
+    - "NO 'prezioso', 'raro', 'esclusivo' senza supporto (edizione limitata con numero)"
+    - "NO claim di valore ('investimento sicuro')"
+    - "NO 'diamante' se è zirconia o moissanite — vietato e fraud GMC"
+    - "NO 'fatto a mano' se è industriale"
+    - "NO 'antico' / 'vintage' senza certificazione"

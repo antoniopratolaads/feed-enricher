@@ -1,0 +1,187 @@
+# Best practice SPORT & FITNESS
+# Attrezzature, abbigliamento tecnico, integratori sportivi, accessori, outdoor.
+# Fonti: GMC attribute guide 2026, best practice Nike/Decathlon feed.
+
+sector: sport
+display_name: Sport & Fitness
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {modello} {disciplina} {tipologia} {gender} {taglia_peso}"
+  formula_examples:
+    - "Nike Pegasus 41 Scarpe da running uomo grigio taglia 43"
+    - "Decathlon Kipsta F500 Pallone calcio misura 5"
+    - "Garmin Forerunner 965 Sportwatch GPS 47mm nero"
+    - "Technogym MyRun tapis roulant pieghevole 20km/h"
+    - "Wilson Pro Staff 97 v14 Racchetta tennis 315g"
+    - "Head Radical Pro 2025 Racchetta tennis 310g grip 3"
+  rules:
+    - "Brand + modello esatto (nei primi 40 char)"
+    - "Disciplina sportiva specifica (running, calcio, tennis, yoga)"
+    - "Gender obbligatorio per abbigliamento/scarpe (uomo/donna/unisex/junior)"
+    - "Taglia/peso/misura critica (EU scarpa, peso racchetta, misura pallone)"
+    - "Tra 70 e 150 char"
+    - "NO 'performance', 'professional' se non è linea ufficiale del brand"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "top performance"  # a meno che non sia nome linea ufficiale
+    - "esclusivo"
+    - "gratis"
+    - "migliore"
+    - "imperdibile"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è + disciplina + livello (principiante / intermedio / agonistico)"
+    - "Blocco tecnologia e materiali (mesh traspirante, EVA, carbon plate)"
+    - "Blocco costruzione (drop mm per scarpe, swing weight racchette, bilanciamento)"
+    - "Blocco peso e dimensioni"
+    - "Blocco uso consigliato (terreno, temperatura, livello impatto)"
+    - "Blocco manutenzione"
+  length:
+    min_chars: 250
+    ideal_chars: 600
+    max_chars: 5000
+  tone:
+    - "Tecnico-sportivo: 'drop 8mm' non 'struttura confortevole'"
+    - "Numeri: peso grammi, drop mm, swing weight, tensione corde, materiali con grammatura"
+    - "Cita tecnologie proprietarie ufficiali (ZoomX, Boost, GEL, FlyKnit)"
+  must_include:
+    - "Disciplina specifica"
+    - "Livello (entry / intermedio / agonistico)"
+    - "Peso + dimensioni"
+    - "Materiale struttura/tomaia/corpo"
+    - "Caratteristica tecnica differenziante"
+    - "Per scarpe: drop, cushioning, stabilità"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: sport_discipline
+    common_values:
+      - running
+      - calcio / football
+      - tennis
+      - padel
+      - basket / basketball
+      - pallavolo / volleyball
+      - ciclismo / cycling
+      - nuoto / swimming
+      - yoga / pilates
+      - crossfit / functional training
+      - trekking / hiking
+      - sci / snowboard
+      - fitness / palestra
+
+  - name: level
+    values: [beginner, intermediate, advanced, pro]
+
+  - name: gender
+    values: [male, female, unisex]
+
+  - name: age_group
+    values: [kids, youth, adult]
+
+  - name: size
+    note: "Dipende da categoria — per scarpe EU, per racchette grip size, per abbigliamento S/M/L/XL"
+
+  - name: weight
+    note: "Peso in grammi — critico per racchette, scarpe, zaini, gear outdoor"
+
+  - name: color
+    rules:
+      - "Nome colore commerciale brand (es. 'Volt', 'Crimson Tint')"
+      - "Aggiungi colore generico italiano se marketing è inglese"
+
+  - name: material
+    common_values:
+      - mesh traspirante
+      - EVA, TPU, polyurethane
+      - carbonio, grafite
+      - poliestere riciclato
+      - Gore-Tex (impermeabile)
+      - neoprene
+      - rivestimento antiscivolo
+
+  - name: product_highlight
+    examples:
+      - "Drop 10mm, cushioning ZoomX, placa carbonio integrata"
+      - "Peso 185g (taglia 42), tomaia mesh ingegnerizzato"
+      - "Testa 97 sq in, peso 315g non incordata, schema 16x19"
+      - "Cardiofrequenzimetro da polso + GPS multibanda"
+      - "Materiale: 70% poliestere riciclato, 30% elastan"
+      - "Livello intermedio-agonistico, adatto a 20+ km/settimana"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Sporting Goods"
+  common_paths:
+    - "Sporting Goods > Athletics > Running"
+    - "Sporting Goods > Athletics > Football"
+    - "Sporting Goods > Athletics > Tennis"
+    - "Sporting Goods > Athletics > Cycling"
+    - "Sporting Goods > Exercise & Fitness > Cardiovascular Exercise Machines"
+    - "Sporting Goods > Exercise & Fitness > Exercise Mats"
+    - "Sporting Goods > Exercise & Fitness > Weight Training"
+    - "Sporting Goods > Outdoor Recreation > Camping & Hiking"
+    - "Sporting Goods > Outdoor Recreation > Winter Sports & Activities"
+    - "Apparel & Accessories > Clothing > Activewear"
+    - "Apparel & Accessories > Shoes"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: sfondo bianco, vista laterale per scarpe, frontale per racchette/abbigliamento"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: suola scarpe, dettaglio tecnologia, in uso/action shot"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    note: "Sport tech branded ha sempre EAN-13"
+  mpn:
+    required: true
+    note: "Codice modello ufficiale produttore"
+  item_group_id:
+    critical: true
+    note: "Raggruppa varianti colore/taglia dello stesso modello"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "disciplina (running / tennis / calcio / fitness...)"
+  custom_label_1: "livello (entry / intermediate / pro)"
+  custom_label_2: "stagione (FW / SS / all_year)"
+  custom_label_3: "fascia_prezzo (entry / mid / premium)"
+  custom_label_4: "performance (bestseller / steady / slow / clearance)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Tecnico-sportivo: citare specifiche misurabili"
+    - "Nome tecnologie ufficiali con TM / R se del caso"
+    - "Peso in grammi, dimensioni in cm/mm"
+    - "Livello target (principiante, intermedio, agonistico)"
+    - "Disciplina specifica (non 'sport generici')"
+  dont:
+    - "NO claim di miglioramento prestazioni non documentati ('ti fa correre più veloce')"
+    - "NO claim medici/fisioterapici ('corregge la postura', 'cura la fascite')"
+    - "NO 'utilizzato dai pro' se non c'è endorsement ufficiale"
+    - "NO confronti con competitor ('meglio di X')"

@@ -1,0 +1,238 @@
+# Best practice ELETTRONICA (Electronics)
+# Smartphone, audio, laptop, TV, smart home, gaming, foto/video, wearable.
+# Fonti: Google Merchant Center Help (support.google.com/merchants/7052112),
+# Store Growers 2026 attribute guide, Adnabu title optimization 2026.
+
+sector: elettronica
+display_name: Elettronica / Consumer Electronics
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {modello} {tipo_prodotto} {specifiche_chiave} {colore}"
+  formula_examples:
+    - "Apple iPhone 17 Pro 256GB Titanio Naturale"
+    - "Sony WH-1000XM6 Cuffie Wireless Noise Cancelling Nero"
+    - "Samsung Galaxy Watch 8 44mm GPS Grafite"
+    - "Dell XPS 15 i9 32GB 1TB SSD 15.6\" OLED 4K"
+    - "LG OLED evo C5 55\" 4K 120Hz Smart TV webOS"
+  rules:
+    - "SEMPRE inizia con brand"
+    - "Modello + numero di modello SEMPRE (è la chiave di ricerca per elettronica)"
+    - "Includi specifiche determinanti per acquisto: capacità storage, RAM, pollici, risoluzione, GPS/cellular, wattaggio, capacità mAh"
+    - "Prime 70 caratteri contengono tutte le info critiche (solo queste sono visibili in molti placement)"
+    - "Tra 80 e 150 caratteri (Google) / max 200 (Meta)"
+    - "USA CIFRE (8, 256, 4K) non parole scritte ('otto', 'quattroK')"
+    - "NO emoji, NO CAPS LOCK, NO '!' o '?'"
+    - "NO 'Acquista ora', 'Offerta', 'Gratis', 'Migliore', 'Sconto' (vietato GMC)"
+    - "Colore dopo specifiche tecniche (non prima)"
+  forbidden_words:
+    - "acquista"
+    - "compra ora"
+    - "offerta"
+    - "gratis"
+    - "sconto"
+    - "saldo"
+    - "migliore"
+    - "imperdibile"
+    - "top di gamma"
+    - "spedizione gratuita"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è + per chi (es. 'Smartphone flagship per chi cerca foto di qualità pro')"
+    - "Blocco specifiche tecniche in bullet (processore, RAM, storage, batteria, display)"
+    - "Blocco feature distintive (es. 'Titanium chassis, Face ID, MagSafe')"
+    - "Blocco connettività (USB-C, WiFi 7, Bluetooth 5.4, 5G)"
+    - "Blocco confezione: cosa c'è dentro (device, cavo USB-C, documentazione)"
+    - "Frase chiusura con caso d'uso tipico"
+  length:
+    min_chars: 300
+    ideal_chars: 800
+    max_chars: 5000
+  tone:
+    - "Tecnico e specifico: 'Snapdragon 8 Gen 4' non 'processore potente'"
+    - "Numeri ovunque possibile (Hz, mAh, nit, GB, MP)"
+    - "NO superlativi non verificabili ('il più veloce sul mercato')"
+    - "NO confronti diretti con competitor"
+  must_include:
+    - "Processore/chipset esatto"
+    - "RAM + storage"
+    - "Autonomia batteria dichiarata dal produttore"
+    - "Risoluzione display + refresh rate"
+    - "Connettività (porte, wireless standard)"
+    - "Dimensioni e peso se rilevanti (wearable, laptop)"
+
+# ============================================================
+# ATTRIBUTI SPECIFICI ELETTRONICA (GMC)
+# ============================================================
+required_attributes:
+  - name: brand
+    rules:
+      - "SEMPRE valorizzato — per elettronica il brand è parte dell'identità prodotto"
+
+  - name: mpn
+    rules:
+      - "Manufacturer Part Number SEMPRE se conosciuto — è il SKU ufficiale del produttore"
+      - "Es: Apple iPhone → A3084, Sony → WH-1000XM6/B"
+
+  - name: gtin
+    rules:
+      - "EAN-13/UPC-12 quasi sempre disponibile per elettronica consumer"
+      - "Valida con mod-10 checksum prima dell'export"
+
+  - name: color
+    rules:
+      - "Nome colore commerciale del produttore (es. 'Titanio Naturale', 'Midnight', 'Grafite')"
+      - "Aggiungi traduzione italiana se marketing name è inglese (es. 'Midnight (Nero)')"
+
+  - name: condition
+    values: [new, refurbished, used]
+    rules:
+      - "Per refurbished indica grado in description (Grado A+/A/B)"
+
+  - name: pattern
+    note: "Raramente usato in elettronica"
+
+  - name: size
+    note: "Per elettronica il 'size' è tipicamente diagonal schermo o capacità storage"
+    common_patterns:
+      - "14\", 15.6\", 16\" per laptop"
+      - "6.1\", 6.7\" per smartphone"
+      - "40mm, 44mm per wearable"
+      - "55\", 65\", 77\" per TV"
+      - "128GB, 256GB, 512GB, 1TB per storage"
+
+  - name: material
+    note: "Indica materiale chassis quando è selling point (alluminio, titanio, vetro, policarbonato)"
+
+  - name: product_highlight
+    rules:
+      - "6-10 bullet da 150 char max ciascuno"
+      - "Ogni bullet = una feature/spec misurabile, NON marketing"
+    examples:
+      - "Chip A19 Pro 6-core con Neural Engine a 38 TOPS"
+      - "Display Super Retina XDR 6.3\" 120Hz ProMotion, 2000 nit peak"
+      - "Fotocamera 48MP Fusion con zoom ottico 5x"
+      - "Autonomia fino a 33 ore riproduzione video"
+      - "Ricarica wireless MagSafe 25W, USB-C 40Gbps"
+
+  - name: product_detail
+    rules:
+      - "Oggetto structured con section_name/attribute_name/attribute_value"
+      - "Sezione 'Specifiche tecniche': RAM, Storage, Connettività, Porte"
+      - "Sezione 'Nella confezione': lista accessori inclusi"
+      - "Sezione 'Compatibilità': sistema operativo supportato, versioni minime"
+
+# ============================================================
+# ENERGY LABEL (obbligatoria EU su molti elettrodomestici elettronici)
+# ============================================================
+energy:
+  required_for:
+    - TV
+    - monitor
+    - lavatrici
+    - frigoriferi
+    - asciugatrici
+    - lavastoviglie
+  fields:
+    - energy_efficiency_class (es. A, B, C...)
+    - min_energy_efficiency_class / max_energy_efficiency_class
+  note: "Dal marzo 2021 scala semplificata A-G. Includi sempre nel feed EU"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY ELETTRONICA
+# ============================================================
+google_taxonomy:
+  root: "Electronics"
+  common_paths:
+    - "Electronics > Communications > Telephony > Mobile Phones > Mobile Phones"
+    - "Electronics > Computers > Laptops"
+    - "Electronics > Computers > Desktop Computers"
+    - "Electronics > Computers > Tablet Computers"
+    - "Electronics > Audio > Audio Components > Headphones & Headsets"
+    - "Electronics > Audio > Audio Players & Recorders"
+    - "Electronics > Video > Televisions"
+    - "Electronics > Video > Projectors"
+    - "Electronics > Cameras & Optics > Cameras > Digital Cameras"
+    - "Electronics > Video Game Consoles"
+    - "Electronics > Electronics Accessories > Power > Batteries > Rechargeable Batteries"
+    - "Electronics > Electronics Accessories > Cables"
+    - "Electronics > Electronics Accessories > Memory > Memory Cards"
+    - "Electronics > Electronics Accessories > Computer Accessories > Input Devices > Keyboards"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: prodotto su sfondo bianco, vista frontale"
+  - "Min 500x500 (requisito GMC dal 30 giugno 2026), ideale 1500x1500"
+  - "additional_image_link: retro, laterale, porte/connessioni, in uso"
+  - "Per smartphone: mostra schermo acceso con UI nel retro"
+  - "NO watermark, NO prezzi/bollini sovrapposti (motivo #1 di disapprovazione)"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    common_formats: [EAN-13, UPC-12]
+  mpn:
+    required: true
+    note: "Per elettronica MPN è critico — spesso più preciso di GTIN per il matching query"
+  item_group_id:
+    note: "Raggruppa varianti colore/storage dello stesso modello (es. tutte le varianti iPhone 17 Pro 256GB)"
+
+# ============================================================
+# COMPATIBILITY
+# ============================================================
+compatibility:
+  note: "Per accessori/ricambi: indica SEMPRE compatibilità in description + product_detail"
+  example: "Compatibile con iPhone 15 Pro / 15 Pro Max / 16 Pro"
+
+# ============================================================
+# CUSTOM LABELS (suggerite per elettronica)
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "fascia_prezzo (entry / mid / premium / flagship)"
+  custom_label_1: "release_year (2024 / 2025 / 2026)"
+  custom_label_2: "performance (bestseller / steady / slow / new)"
+  custom_label_3: "refurb_grade (new / refurb_a / refurb_b)"
+  custom_label_4: "categoria_marketing (gaming / productivity / lifestyle)"
+
+# ============================================================
+# PLATFORM DIFFERENCES
+# ============================================================
+platform_differences:
+  google:
+    title_max: 150
+    description_max: 5000
+    mandatory_spec_attributes: [brand, gtin, mpn, condition, google_product_category]
+  meta:
+    title_max: 200
+    description_max: 9999
+    short_description_max: 200
+    note: "Meta privilegia short_description scannable con bullet"
+
+# ============================================================
+# TONO DI VOCE PER L'AI
+# ============================================================
+ai_voice:
+  do:
+    - "Linguaggio tecnico preciso (GHz, GB, Hz, lumens, nit, mAh)"
+    - "Usa nomi marketing ufficiali dei produttori ('Dynamic Island', 'Liquid Retina', 'Neural Engine')"
+    - "Mostra benefici concreti ancorati a specs ('5G mmWave per download >2Gbps in aree coperte')"
+    - "Cita standard (Bluetooth 5.4, WiFi 7, Thunderbolt 5, USB-C PD 3.1)"
+    - "Precisione numerica ovunque possibile"
+  dont:
+    - "NO claim di performance non verificabili ('il più veloce')"
+    - "NO promesse che dipendono da rete (es. 'velocità fino a X' senza '*in condizioni ideali')"
+    - "NO confronti diretti con competitor"
+    - "NO terminologia inventata ('ultra-turbo-boost')"
+    - "NO claim medici (per wearable: 'monitora' non 'diagnostica')"

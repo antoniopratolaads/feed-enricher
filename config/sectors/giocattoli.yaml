@@ -1,0 +1,205 @@
+# Best practice GIOCATTOLI / TOYS
+# Giochi per bambini, costruzioni, peluche, giochi tavolo, veicoli,
+# giochi educativi. Obbligo CE + età minima + piccole parti.
+# Fonti: GMC toy safety policy, EU toy directive 2009/48/EC, CPSIA.
+
+sector: giocattoli
+display_name: Giocattoli / Toys
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {linea} {tipologia} {caratteristiche} {eta_minima}"
+  formula_examples:
+    - "LEGO Technic 42165 McLaren F1 Team MCL60 1:12 auto costruzioni 9+ anni"
+    - "Playmobil 71360 City Action ambulanza con paramedici 4+ anni"
+    - "Ravensburger 3000 pezzi Puzzle Venezia Canal Grande adulti 14+"
+    - "Fisher-Price HML86 Cubo attività 5 in 1 primi passi 9-36 mesi"
+    - "Monopoly Classico Hasbro gioco tavolo 2-6 giocatori 8+ anni"
+  rules:
+    - "Brand + codice linea (LEGO 42165) sempre"
+    - "Età minima consigliata OBBLIGATORIA — regola CE + GMC"
+    - "Numero pezzi / giocatori quando applicabile"
+    - "Categoria chiara (costruzione, puzzle, gioco tavolo, action figure)"
+    - "Tra 60 e 150 char"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "migliore regalo"
+    - "educativo"  # solo se certificato/testato
+    - "sicuro"  # implicito, conformità CE
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è + età minima + numero giocatori (se applicabile)"
+    - "Blocco cosa sviluppa (motricità, logica, creatività) — senza claim medici"
+    - "Blocco contenuto confezione (pezzi, istruzioni, batterie incluse/escluse)"
+    - "Blocco materiali + conformità CE"
+    - "WARNING obbligatori (piccole parti per bambini < 3 anni)"
+    - "Pila/batterie: tipo e numero se richieste"
+  length:
+    min_chars: 200
+    ideal_chars: 500
+    max_chars: 5000
+  tone:
+    - "Concreto e divertente ma onesto"
+    - "Specifica cosa 'fa' il gioco senza promesse educative non verificate"
+    - "Età in intervallo (3-5 anni, 6-9 anni) + età minima assoluta"
+  must_include:
+    - "Età minima consigliata (CE)"
+    - "Numero pezzi o giocatori"
+    - "Batterie richieste (sì/no, tipo, incluse sì/no)"
+    - "WARNING piccole parti se < 3 anni sconsigliato"
+    - "Conformità CE + EN 71 (giocattoli EU)"
+    - "Dimensioni del gioco montato (se costruzione)"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: age_group
+    values: [newborn, infant, toddler, kids]
+    rules:
+      - "newborn: 0-3 mesi"
+      - "infant: 3-12 mesi"
+      - "toddler: 1-5 anni"
+      - "kids: 5+ anni"
+    note: "OBBLIGATORIO per giocattoli su GMC"
+
+  - name: age_min
+    format: "mesi o anni"
+    note: "Età minima esplicita dalla confezione (SEMPRE indicata per CE)"
+
+  - name: number_of_players
+    note: "Per giochi da tavolo"
+
+  - name: gender
+    values: [male, female, unisex]
+    note: "Preferisci 'unisex' salvo casi chiari — evita stereotipi"
+
+  - name: material
+    common_values:
+      - plastica (ABS, PP, PE)
+      - legno
+      - peluche (poliestere, cotone)
+      - cartone
+      - tessuto
+      - metallo
+
+  - name: assembly_required
+    values: [yes, no]
+
+  - name: batteries
+    fields:
+      - batteries_required (yes/no)
+      - batteries_included (yes/no)
+      - battery_type (AA/AAA/9V/C/D/lithium)
+      - battery_count
+
+  - name: safety_warning
+    examples:
+      - "Non adatto a bambini sotto i 3 anni per piccole parti"
+      - "Attenzione: magneti pericolosi se ingeriti"
+      - "Solo per uso sotto supervisione adulta"
+
+  - name: certifications
+    required_for_eu:
+      - "CE mark (obbligatorio)"
+      - "EN 71 (sicurezza giocattoli EU)"
+      - "EN 62115 per giochi elettrici"
+      - "REACH (sostanze chimiche)"
+    optional:
+      - "FSC (per giochi in legno)"
+      - "OEKO-TEX (per peluche tessili)"
+
+  - name: product_highlight
+    examples:
+      - "Set LEGO Technic 1432 pezzi, scala 1:12"
+      - "Dimensioni modello montato: 65 cm L"
+      - "Età consigliata: 9+ anni"
+      - "Include istruzioni di montaggio passo-passo"
+      - "Conforme CE + EN 71"
+      - "ATTENZIONE: contiene piccole parti, non adatto a <3 anni"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Toys & Games > Toys"
+  common_paths:
+    - "Toys & Games > Toys > Building Toys > Construction Set Toys"
+    - "Toys & Games > Toys > Dolls, Playsets & Toy Figures > Action Figures"
+    - "Toys & Games > Toys > Dolls, Playsets & Toy Figures > Dolls"
+    - "Toys & Games > Toys > Educational Toys"
+    - "Toys & Games > Toys > Pretend Play"
+    - "Toys & Games > Toys > Puzzles"
+    - "Toys & Games > Toys > Remote Control Toys > Remote Control Cars & Trucks"
+    - "Toys & Games > Toys > Stuffed Animals"
+    - "Toys & Games > Toys > Toy Vehicles > Toy Cars"
+    - "Toys & Games > Games > Board Games"
+    - "Toys & Games > Games > Card Games"
+    - "Toys & Games > Games > Video Games"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: prodotto su sfondo bianco, scatola o prodotto completo"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: pezzi in azione, istruzioni, bambino che gioca (con diritti)"
+  - "NO bambini in posa innaturale / scatti reali senza consenso"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required: true
+    note: "EAN-13 obbligatorio su confezione giocattoli"
+  mpn:
+    required: true
+    note: "Codice modello produttore (es. LEGO 42165)"
+  item_group_id:
+    note: "Raggruppa varianti colore/dimensione della stessa linea"
+
+# ============================================================
+# POLICY GMC GIOCATTOLI
+# ============================================================
+policy_compliance:
+  - "Giocattoli con piccole parti devono avere warning visibile"
+  - "Giocattoli elettrici: rispetta EN 62115"
+  - "NO giocattoli promossi per età inferiori a quella dichiarata"
+  - "NO giocattoli richiamati / non conformi"
+  - "Per peluche lunghi pelo: dichiarare lavaggio"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "categoria (costruzioni / puzzle / peluche / tavolo / veicoli)"
+  custom_label_1: "fascia_eta (0-3 / 3-6 / 6-9 / 9-14 / 14+)"
+  custom_label_2: "stagionalita (evergreen / natale / estate)"
+  custom_label_3: "fascia_prezzo (entry / mid / premium / collectors)"
+  custom_label_4: "performance (bestseller / steady / slow)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Età consigliata SEMPRE chiara (da CE)"
+    - "Specifica cosa contiene e cosa si fa"
+    - "Warning sicurezza in evidenza"
+    - "Dimensioni finali se costruzione"
+    - "Lavabilità se peluche"
+  dont:
+    - "NO promesse educative non testate ('sviluppa il QI', 'migliora la memoria')"
+    - "NO stereotipi gender ('per maschietti', 'per femminucce')"
+    - "NO 'regalo perfetto per il tuo bambino' (spammy)"
+    - "NO omissione età o warning sicurezza"
+    - "NO confronti diretti tra giocattoli concorrenti"

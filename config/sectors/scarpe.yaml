@@ -1,0 +1,190 @@
+# Best practice SCARPE (Shoes & Footwear)
+# Sneakers, classiche, sportive, trekking, sandali, tacchi, boots.
+# Fonti: GMC apparel guide 2026, structured title eyewear/shoes Adnabu.
+
+sector: scarpe
+display_name: Scarpe / Footwear
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {modello} {tipologia} {gender} {colore} {taglia_eu}"
+  formula_examples:
+    - "Nike Air Max 90 Sneakers uomo bianco e nero taglia EU 43"
+    - "Adidas Samba OG Sneakers donna bianco verde EU 38"
+    - "Timberland 6-Inch Premium Boot uomo giallo wheat 44"
+    - "Salomon Speedcross 6 Trail running uomo nero arancio 44"
+    - "Birkenstock Arizona Sandalo unisex marrone pelle 40"
+  rules:
+    - "Brand + modello nei primi 40 char"
+    - "Tipologia chiara (sneakers, stivali, mocassini, scarpe running, sandali)"
+    - "Gender OBBLIGATORIO (uomo / donna / unisex / bambino)"
+    - "Colore principale sempre prima (multicolor = max 2 colori)"
+    - "Taglia EU SEMPRE (usa 'EU 43' per evitare confusione con UK/US)"
+    - "Per bambino: età o taglia bambino (EU 24, 2Y...)"
+    - "Tra 70 e 150 char"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "sconto"
+    - "spedizione gratuita"
+    - "migliore"
+    - "top di gamma"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa sono + uso (running, lifestyle, formale, trail)"
+    - "Blocco tomaia (materiale + costruzione)"
+    - "Blocco suola (materiale, drop, grip, cushioning)"
+    - "Blocco chiusura (stringhe, velcro, zip, elastico)"
+    - "Blocco sottopiede (rimovibile? lavabile?)"
+    - "Blocco vestibilità (true to size / una mezza in più / una mezza in meno)"
+    - "Blocco cura (spazzola morbida, no lavatrice per pelle)"
+  length:
+    min_chars: 250
+    ideal_chars: 550
+    max_chars: 5000
+  tone:
+    - "Tecnico-concreto: 'mesh ingegnerizzato con rinforzi in TPU' non 'traspirante e resistente'"
+    - "Peso grammi, drop in mm per sportive"
+    - "Materiali esatti: pelle pieno fiore, pelle scamosciata, nylon balistico"
+  must_include:
+    - "Tomaia: materiale"
+    - "Suola: materiale + caratteristica (GYW, cucitura Goodyear, vulcanizzata)"
+    - "Chiusura"
+    - "Vestibilità (fit suggerito)"
+    - "Gender"
+    - "Taglia EU"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: gender
+    values: [male, female, unisex]
+
+  - name: age_group
+    values: [infant, toddler, kids, adult]
+
+  - name: size
+    format: "EU preferito"
+    common_values_adult: ["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47"]
+    common_values_kids: ["24", "26", "28", "30", "32", "34"]
+
+  - name: size_system
+    default: "EU"
+    values: [EU, US, UK, JP, MEX, BR]
+
+  - name: size_type
+    values: [regular, wide, narrow, petite]
+    note: "Solo se variante specifica"
+
+  - name: color
+    rules:
+      - "Colore dominante primo"
+      - "Max 2 colori separati da 'e' o '/'"
+      - "Colori italiani standard: bianco, nero, blu, rosso, verde, grigio, beige, rosa, giallo, marrone, viola, arancione"
+      - "Sfumature ammesse se nome ufficiale brand (es. 'Gum', 'Wheat', 'Cream')"
+
+  - name: material
+    common_values:
+      - pelle pieno fiore
+      - pelle scamosciata (suede)
+      - pelle sintetica (ecopelle)
+      - mesh
+      - nylon
+      - canvas / tela
+      - gomma (per Wellies)
+
+  - name: heel_height
+    format: "cm"
+    note: "Per tacchi indicare altezza"
+
+  - name: shoe_type
+    values:
+      - sneakers
+      - running
+      - trail / hiking
+      - formali / classiche
+      - mocassini / loafer
+      - stivali / boots
+      - sandali
+      - ciabatte
+      - zoccoli
+      - ballerine
+      - décolleté / pumps
+
+  - name: product_highlight
+    examples:
+      - "Tomaia in mesh ingegnerizzato con sovrapposizioni in pelle sintetica"
+      - "Suola Air Unit visibile nel tallone"
+      - "Drop 8mm, cushioning React foam"
+      - "Chiusura stringhe con occhielli metallici"
+      - "Peso 310g in taglia 42"
+      - "Vestibilità true to size — ordina la tua taglia abituale"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Apparel & Accessories > Shoes"
+  common_paths:
+    - "Apparel & Accessories > Shoes"  # generico
+    - "Apparel & Accessories > Clothing Accessories > Socks"
+    - "Sporting Goods > Athletics > Running > Running Shoes"
+    - "Sporting Goods > Athletics > Football > Soccer Shoes"
+    - "Sporting Goods > Outdoor Recreation > Camping & Hiking > Hiking Shoes"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: vista laterale con punta a sinistra (standard retail)"
+  - "Sfondo bianco puro preferito"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: vista dall'alto, suola, interno, coppia, in uso"
+  - "Per ogni variante colore: foto specifica (OBBLIGATORIO su Google)"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    note: "EAN-13 per scarpe branded disponibile quasi sempre"
+  mpn:
+    required: true
+    note: "Codice modello produttore (es. 'CW2288-111' per Nike Air Force 1)"
+  item_group_id:
+    critical: true
+    note: "Raggruppa tutte le varianti taglia dello stesso modello+colore — OBBLIGATORIO"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "categoria (sneakers / running / casual / formali / trail)"
+  custom_label_1: "stagione (FW / SS / all_year)"
+  custom_label_2: "fascia_prezzo (entry / mid / premium / luxury)"
+  custom_label_3: "performance (bestseller / steady / slow / new)"
+  custom_label_4: "stock (full_stock / missing_sizes / clearance)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Materiale tomaia + suola specifici"
+    - "Vestibilità consigliata (true to size / una taglia in più)"
+    - "Tecnologie ufficiali proprietarie (Air, Boost, ZoomX, GEL)"
+    - "Uso suggerito (running quotidiano, trail medio, giornata in ufficio)"
+  dont:
+    - "NO 'adatto a tutti' — specifica l'uso"
+    - "NO promesse ortopediche non documentate"
+    - "NO confronti con altri modelli ('meglio delle X')"
+    - "NO 'scarpa da regalo' / 'perfetta per ogni occasione'"

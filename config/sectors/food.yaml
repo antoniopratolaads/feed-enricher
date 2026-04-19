@@ -1,0 +1,214 @@
+# Best practice FOOD & BEVERAGE (Alimentari & Bevande)
+# Dry food, conserve, dolci, integratori alimentari (non farmaci), bevande non alcoliche,
+# vini e alcolici (regole specifiche separate), olio, pasta, caffè.
+# Fonti: GMC food safety policy (9128334), FDA allergen 2026, title structure Adnabu 2026.
+
+sector: food
+display_name: Food & Beverage / Alimentari
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {prodotto} {gusto_varieta} {formato_pack} {quantita}"
+  formula_examples:
+    - "Barilla Penne Rigate n.73 Pasta di semola 500 g"
+    - "Lavazza Qualità Oro caffè macinato 250 g"
+    - "Coca-Cola Zero Sugar lattina 33cl confezione da 6"
+    - "Mulino Bianco Pan di Stelle biscotti cacao 350 g"
+    - "San Benedetto acqua naturale 1.5L confezione da 6"
+    - "Rummo Linguine n.13 pasta di semola Ruvida 500g"
+  rules:
+    - "Brand + prodotto nei primi 30 char"
+    - "Gusto / varietà / tipologia SEMPRE (vaniglia, fragola, integrale, senza zucchero)"
+    - "Formato pack + quantità singola + unità totali (es. 'lattina 33cl x 6')"
+    - "Quantità in unità metriche ufficiali: g, kg, ml, L, cl"
+    - "Tra 60 e 150 char — alimentari vincono con titoli compatti"
+    - "NO claim salute ('dimagrisce', 'cura') — vietati GMC"
+    - "NO 'biologico' se non certificato (obbligo EU regolamento 2018/848)"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "sconto"
+    - "sconfigge"
+    - "cura"
+    - "dimagrisce"
+    - "miracoloso"
+    - "naturale al 100%"  # claim vago vietato
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cos'è + tipologia (es. 'Pasta di semola di grano duro trafilata al bronzo')"
+    - "Blocco ingredienti (lista completa, allergeni in MAIUSCOLO)"
+    - "Valori nutrizionali per 100g/100ml (kcal, grassi, carboidrati, zuccheri, proteine, sale)"
+    - "Suggerimenti d'uso / preparazione / abbinamenti"
+    - "Conservazione (temperatura, luogo, dopo apertura)"
+    - "Provenienza / certificazioni (IGP, DOP, BIO con codice organismo, Fairtrade)"
+  length:
+    min_chars: 250
+    ideal_chars: 600
+    max_chars: 5000
+  tone:
+    - "Fattuale, ingredient-driven"
+    - "Numeri: grammatura, % ingredienti caratterizzanti, valori nutrizionali"
+    - "Certificazioni SEMPRE citate con codici (es. 'Bio IT-BIO-006')"
+  must_include:
+    - "Lista ingredienti (obbligatorio EU reg 1169/2011)"
+    - "Allergeni in evidenza (maiuscolo o grassetto)"
+    - "Quantità netta"
+    - "Valori nutrizionali per 100g/100ml"
+    - "Conservazione"
+    - "Operatore alimentare responsabile (nome + indirizzo)"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: quantity
+    format: "g, kg, ml, L, cl, pezzi"
+    rules:
+      - "Indica SEMPRE quantità netta (non lorda)"
+      - "Per pack: 'confezione da X' + 'totale Y g'"
+
+  - name: multipack
+    note: "Numero unità in multipack (es. 6 lattine = multipack 6)"
+
+  - name: flavor / variety
+    note: "Gusto o varietà — critico per food"
+    examples: [fragola, vaniglia, naturale, affumicato, extravergine, integrale]
+
+  - name: ingredients
+    note: "Lista completa — anche se non esportata in feed, include in description"
+
+  - name: allergens
+    eu_list:
+      - cereali con glutine
+      - crostacei
+      - uova
+      - pesce
+      - arachidi
+      - soia
+      - latte (incluso lattosio)
+      - frutta a guscio
+      - sedano
+      - senape
+      - sesamo
+      - anidride solforosa e solfiti >10mg/kg
+      - lupini
+      - molluschi
+
+  - name: certifications
+    common:
+      - "Biologico EU (IT-BIO-XXX codice organismo)"
+      - "DOP (Denominazione Origine Protetta)"
+      - "IGP (Indicazione Geografica Protetta)"
+      - "STG (Specialità Tradizionale Garantita)"
+      - "Fairtrade"
+      - "Kosher / Halal"
+      - "Senza glutine (AIC)"
+      - "Vegano / Vegetariano (VLabel, Vegan OK)"
+
+  - name: storage_temperature
+    values:
+      - temperatura ambiente
+      - fresco 0-4°C
+      - surgelato -18°C
+      - dopo apertura conservare in frigo
+
+  - name: nutritional_facts
+    per: "100g o 100ml"
+    required_fields:
+      - energia (kJ + kcal)
+      - grassi (di cui saturi)
+      - carboidrati (di cui zuccheri)
+      - proteine
+      - sale
+
+  - name: expiration_date_format
+    note: "Da indicare su prodotto; per feed GMC usa expiration_date [date] in YYYY-MM-DD"
+    policy_link: "https://support.google.com/googleshopping/answer/9128334"
+
+  - name: product_highlight
+    examples:
+      - "Pasta di semola di grano duro 100% italiano"
+      - "Trafilatura al bronzo per superficie ruvida"
+      - "Tempo di cottura 11 minuti"
+      - "Energia 359 kcal per 100g, proteine 13g"
+      - "Contiene GLUTINE. Può contenere tracce di uova e soia"
+      - "Conservare in luogo fresco e asciutto"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Food, Beverages & Tobacco"
+  common_paths:
+    - "Food, Beverages & Tobacco > Food Items > Pasta & Noodles > Pasta"
+    - "Food, Beverages & Tobacco > Food Items > Condiments & Sauces"
+    - "Food, Beverages & Tobacco > Food Items > Snack Foods > Cookies"
+    - "Food, Beverages & Tobacco > Food Items > Snack Foods > Chips"
+    - "Food, Beverages & Tobacco > Beverages > Coffee"
+    - "Food, Beverages & Tobacco > Beverages > Tea & Infusions"
+    - "Food, Beverages & Tobacco > Beverages > Water"
+    - "Food, Beverages & Tobacco > Beverages > Soft Drinks"
+    - "Food, Beverages & Tobacco > Beverages > Alcoholic Beverages > Wine"
+    - "Food, Beverages & Tobacco > Beverages > Alcoholic Beverages > Beer"
+
+# ============================================================
+# REGOLE PARTICOLARI ALCOLICI
+# ============================================================
+alcoholic_beverages:
+  policy:
+    - "Google richiede age_group=adult"
+    - "Alcuni paesi bloccano completamente — verifica country targeting"
+    - "Vietato vendere a minori (obbligo verificabilità età)"
+    - "Descrizione senza toni incoraggianti consumo eccessivo"
+  required_fields:
+    - "alcohol_by_volume (ABV %)"
+    - "bottle_volume (cl, ml)"
+    - "vintage (anno) per vini"
+    - "country_of_origin"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required: true
+    note: "EAN-13 obbligatorio sul packaging alimentare — valida checksum"
+  mpn:
+    optional: true
+  item_group_id:
+    note: "Raggruppa varianti gusto/formato dello stesso prodotto"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "categoria_food (secco / fresco / surgelato / bevanda)"
+  custom_label_1: "certificazione (bio / dop / igp / nessuna)"
+  custom_label_2: "allergeni (gluten_free / lactose_free / vegan)"
+  custom_label_3: "fascia_prezzo (entry / mid / premium / gourmet)"
+  custom_label_4: "rotazione (fast_mover / steady / slow / clearance)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Ingrediente-driven: specifica % ingredienti caratterizzanti"
+    - "Cita territorio/origine (Parmigiano Reggiano DOP 24 mesi)"
+    - "Valori nutrizionali per 100g"
+    - "Allergeni evidenziati"
+    - "Suggerimenti d'uso concreti (abbinamenti, ricette, tempi cottura)"
+  dont:
+    - "NO claim salute non autorizzati UE (regolamento 1924/2006)"
+    - "NO 'dimagrante', 'detox', 'brucia-grassi', 'anti-invecchiamento'"
+    - "NO 'naturale al 100%' se contiene additivi"
+    - "NO 'artigianale' se industriale"
+    - "NO 'tradizionale' se prodotto nuovo"
+    - "NO claim eco/green senza certificazione"

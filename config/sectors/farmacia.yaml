@@ -1,0 +1,239 @@
+# Best practice FARMACIA / OTC HEALTH
+# Parafarmaco, integratori alimentari, cosmetici farmaceutici, dispositivi medici CE,
+# cura della persona. ATTENZIONE: farmaci con obbligo ricetta NON PUBBLICIZZABILI
+# su GMC senza certificazione (LegitScript / NABP). OTC OK con regole strette.
+# Fonti: GMC Healthcare & Medicines (12079605), Reg EU 1924/2006 health claims.
+
+sector: farmacia
+display_name: Farmacia / Parafarmacia / Health OTC
+version: 1.0
+
+# ============================================================
+# WARNING CRITICO
+# ============================================================
+critical_warning:
+  - "NO vendita di farmaci con obbligo di ricetta medica su GMC senza certificazione LegitScript / NABP"
+  - "NO claim terapeutici non autorizzati EMA/AIFA"
+  - "NO 'cura', 'guarisce', 'sconfigge' per OTC/integratori/cosmetici"
+  - "Verificare policy paese target (alcune nazioni bloccano categoria intera)"
+  - "Integratori: solo claim sintomatici autorizzati EFSA (reg 1924/2006)"
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {linea} {forma} {principio_attivo_o_ingrediente} {formato}"
+  formula_examples:
+    - "Tachipirina 500mg compresse paracetamolo 20 cpr"
+    - "Voltaren Emulgel 2% gel cutaneo diclofenac 100g"
+    - "La Roche-Posay Anthelios UVMune 400 SPF50+ fluido viso 50ml"
+    - "Swisse Multivitaminico Uomo 60 compresse"
+    - "Nicorette Gum 4mg menta gomme da masticare 30 pezzi"
+    - "Omron M3 Comfort misuratore pressione braccio digitale"
+  rules:
+    - "Brand + linea commerciale sempre"
+    - "Forma farmaceutica chiara (compresse, gel, sciroppo, fiale, gomme, spray)"
+    - "Dosaggio del principio attivo SEMPRE (mg, %, mcg)"
+    - "Formato (numero compresse, ml, g)"
+    - "Per dispositivi medici CE: inserisci categoria (Classe I/IIa/IIb/III)"
+    - "Tra 60 e 150 char"
+  forbidden_words:
+    - "cura"
+    - "guarisce"
+    - "sconfigge"
+    - "elimina"  # per malattie/sintomi
+    - "garantito"
+    - "al 100%"
+    - "testato clinicamente"  # solo se con studio citato
+    - "approvato dai medici"  # vago
+    - "miracoloso"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: tipologia prodotto (OTC / integratore / cosmetico / dispositivo medico CE)"
+    - "Blocco composizione (principio attivo + eccipienti se farmaco; INCI per cosmetici)"
+    - "Indicazioni d'uso (sintomi per cui è indicato — usa frasi AIFA/autorizzate)"
+    - "Modo d'uso e posologia"
+    - "Controindicazioni + avvertenze"
+    - "Effetti collaterali noti (se OTC — obbligatorio foglietto illustrativo)"
+    - "Categoria FU (Farmacopea Ufficiale): dietetico / parafarmaco / SOP / OTC"
+    - "Conservazione"
+  length:
+    min_chars: 300
+    ideal_chars: 700
+    max_chars: 5000
+  tone:
+    - "Clinico, sobrio, factual"
+    - "Usa 'indicato per' o 'può contribuire a' (reg 1924/2006) invece di 'cura'"
+    - "Cita sempre 'leggere attentamente il foglietto illustrativo'"
+    - "Per integratori: frase obbligatoria 'Non utilizzare in sostituzione di una dieta varia ed equilibrata'"
+  must_include:
+    - "Categoria (OTC / integratore / cosmetico / dispositivo medico)"
+    - "Composizione / principio attivo / INCI"
+    - "Indicazioni (frase autorizzata)"
+    - "Posologia / modo d'uso"
+    - "Avvertenze essenziali"
+    - "Conservazione"
+    - "Produttore / titolare AIC"
+    - "Per OTC: codice AIC"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: product_type
+    values:
+      - OTC (Senza Obbligo Prescrizione)
+      - SOP (Senza Obbligo Prescrizione con ricetta suggerita)
+      - integratore alimentare
+      - cosmetico
+      - dispositivo medico CE
+      - parafarmaco
+      - alimento a fini medici speciali (AFMS)
+
+  - name: active_ingredient
+    note: "Principio attivo + dosaggio per OTC/SOP"
+    examples:
+      - "Paracetamolo 500mg"
+      - "Ibuprofene 400mg"
+      - "Diclofenac 2%"
+      - "Omega-3 (EPA 250mg, DHA 175mg)"
+
+  - name: pharmaceutical_form
+    values:
+      - compresse
+      - capsule
+      - compresse effervescenti
+      - bustine
+      - sciroppo
+      - soluzione orale
+      - gocce
+      - spray
+      - crema / pomata / gel
+      - fiale / siringhe
+      - gomme da masticare
+      - supposte
+      - cerotti transdermici
+
+  - name: administration_route
+    values: [orale, topica/cutanea, oftalmica, rettale, vaginale, nasale, inalatoria, sublinguale]
+
+  - name: age_restriction
+    examples:
+      - "adulti >12 anni"
+      - "bambini da 6 mesi"
+      - "non indicato <6 anni"
+
+  - name: medical_device_class
+    values: [I, IIa, IIb, III]
+    note: "Per dispositivi medici — impatta tempi/modalità d'uso e conformità"
+
+  - name: certifications
+    common:
+      - "CE (dispositivi medici, cosmetici)"
+      - "AIC (Autorizzazione Immissione in Commercio) per farmaci"
+      - "Ministero della Salute notifica (integratori)"
+      - "GMP (Good Manufacturing Practice)"
+      - "Biodegradable / Eco-friendly"
+
+  - name: allergen_warnings
+    examples: [glutine, lattosio, soia, arachidi, derivati animali, lattice]
+
+  - name: product_highlight
+    examples:
+      - "Principio attivo: paracetamolo 500mg"
+      - "Indicato per febbre e dolore lieve-moderato (adulti e bambini >12 anni)"
+      - "Posologia: 1 compressa ogni 6-8 ore, max 3/die"
+      - "Confezione 20 compresse"
+      - "Leggere attentamente il foglietto illustrativo"
+      - "AIC 012745"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Health & Beauty > Health Care"
+  common_paths:
+    - "Health & Beauty > Health Care > Medicine & Drugs"
+    - "Health & Beauty > Health Care > First Aid"
+    - "Health & Beauty > Health Care > Nutrition & Food Supplements"
+    - "Health & Beauty > Health Care > Vitamins & Supplements"
+    - "Health & Beauty > Health Care > Digestion & Nausea"
+    - "Health & Beauty > Health Care > Pain Relief"
+    - "Health & Beauty > Health Care > Smoking Cessation"
+    - "Health & Beauty > Health Care > Blood Pressure Monitors"
+    - "Health & Beauty > Health Care > Thermometers"
+    - "Health & Beauty > Personal Care > Oral Care"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: packaging su sfondo bianco, frontale"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: back packaging con composizione/posologia, foglietto illustrativo"
+  - "NO bambini che usano farmaci nelle immagini"
+  - "NO testo enfatico sovrapposto (discount, offerta) — viola policy salute"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required: true
+    note: "EAN-13 obbligatorio per OTC commercializzati"
+  aic:
+    required_for_drugs: true
+    note: "Codice AIC 6 cifre italiano per farmaci (es. 012745)"
+  mpn:
+    optional: true
+  item_group_id:
+    note: "Raggruppa varianti formato dello stesso medicinale"
+
+# ============================================================
+# CLAIM CHE PUOI USARE (autorizzati EFSA/AIFA)
+# ============================================================
+allowed_claims_examples:
+  - "contribuisce al normale funzionamento del sistema immunitario (con Vitamina C, D, Zinco, Selenio)"
+  - "contribuisce a ridurre stanchezza e affaticamento (Magnesio, Vit B6, B12)"
+  - "favorisce la normale digestione (finocchio, melissa)"
+  - "contribuisce a mantenere la normale pressione sanguigna (potassio)"
+
+forbidden_claims_examples:
+  - "cura la pressione alta"
+  - "guarisce l'insonnia"
+  - "risolve il reflusso"
+  - "elimina il diabete"
+  - "sostituisce la terapia antinfiammatoria"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "categoria (OTC / integratore / cosmetico / DM)"
+  custom_label_1: "patologia (antidolorifici / digestivi / vitamine / prima_infanzia / cardio)"
+  custom_label_2: "fascia_prezzo (entry / mid / premium)"
+  custom_label_3: "performance (bestseller / steady / slow / seasonal)"
+  custom_label_4: "stagionalita (inverno / estate / allergie / evergreen)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Clinico, sobrio, factual — eviate entusiasmo commerciale"
+    - "Usa frasi AIFA autorizzate per indicazioni"
+    - "Cita principio attivo + dosaggio sempre"
+    - "Ricorda 'leggere foglietto illustrativo'"
+    - "Per integratori: cita claim EFSA autorizzati con salute e ingrediente"
+    - "Cita AIC / codice autorizzazione quando applicabile"
+  dont:
+    - "MAI 'cura', 'guarisce', 'sconfigge' malattie"
+    - "MAI confronto con farmaci concorrenti ('più efficace di X')"
+    - "MAI 'raccomandato dai medici' senza citare studio/società scientifica"
+    - "MAI posologia diversa da foglietto illustrativo"
+    - "MAI immagini di bambini che usano medicinali in modo autonomo"
+    - "MAI testimonianze di guarigione"

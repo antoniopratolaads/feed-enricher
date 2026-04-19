@@ -1,0 +1,225 @@
+# Best practice AUTO & MOTO (Automotive Parts & Accessories)
+# Ricambi, accessori, pneumatici, olii, batterie, elettronica auto.
+# Fonti: GMC automotive attribute guide 2026 (Brand+Product+Vehicle+Year+Part#).
+
+sector: auto_moto
+display_name: Auto & Moto / Automotive
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {codice_oem} {tipologia_ricambio} {compatibilita_veicolo} {specifiche}"
+  formula_examples:
+    - "Bosch 0986424816 Pastiglie freno anteriori Volkswagen Golf VII 2012-2020"
+    - "Michelin Pilot Sport 5 225/45 R17 94Y pneumatico estivo"
+    - "Castrol Edge 5W-30 LL olio motore 4 litri sintetico"
+    - "Varta Silver Dynamic E38 12V 74Ah 750A batteria auto start-stop"
+    - "Brembo 09.A185.11 disco freno ventilato 320mm BMW Serie 3 F30"
+  rules:
+    - "Brand + codice OEM/SKU produttore SEMPRE (è la query principale di ricerca)"
+    - "Tipologia ricambio chiara (pastiglie, dischi, filtri, batteria, olio, pneumatici)"
+    - "COMPATIBILITÀ veicolo OBBLIGATORIA: marca/modello/anno/motorizzazione"
+    - "Specifiche tecniche determinanti (dimensioni, amperaggio, viscosità olio)"
+    - "Usa codici OEM ufficiali (es. Volkswagen 5Q0 698 151 F)"
+    - "Tra 80 e 150 char"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "gratis"
+    - "imperdibile"
+    - "migliore"
+    - "omologato"  # solo se reale — spesso claim abusivo
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cos'è + tipologia + funzione"
+    - "Blocco compatibilità veicoli (marca + modello + anno + motorizzazione + cilindrata + kW/CV + codice motore)"
+    - "Blocco specifiche tecniche (dimensioni, peso, dati elettrici)"
+    - "Blocco materiali + costruzione"
+    - "Blocco omologazioni (ECE, E1, DOT, TUV)"
+    - "Blocco installazione (difficoltà, coppia serraggio, strumenti necessari)"
+    - "Blocco durata/manutenzione (km consigliati per sostituzione)"
+    - "Blocco confezione (pz incluse, gel/olio incluso)"
+  length:
+    min_chars: 300
+    ideal_chars: 800
+    max_chars: 5000
+  tone:
+    - "Tecnico-automotive preciso: 'pastiglie ferodo semi-metalliche' non 'pastiglie di qualità'"
+    - "Cita codici OEM, codici di compatibilità ACEA/API per oli, omologazioni"
+    - "Misure in unità SI (mm, Nm, V, Ah, CCA)"
+  must_include:
+    - "Compatibilità veicoli completa (marca, modello, anno range, motore, codice motore)"
+    - "Codice OEM originale (per sostituzione ricambio)"
+    - "Specifiche tecniche numeriche (Ah, V, dimensioni, viscosità)"
+    - "Omologazioni (ECE, DOT per ricambi sicurezza)"
+    - "Materiale/tipo (sinterizzato / organico per pastiglie freno, sintetico/minerale per olio)"
+    - "Istruzioni installazione se self-service"
+
+# ============================================================
+# ATTRIBUTI CRITICI
+# ============================================================
+required_attributes:
+  - name: compatibility
+    required: true
+    fields:
+      - make (es. Volkswagen, Ford, BMW, Fiat)
+      - model (es. Golf VII, Focus, Serie 3)
+      - year_start (es. 2012)
+      - year_end (es. 2020)
+      - engine_code (es. CAXA, EA211)
+      - engine_power_kw
+      - engine_power_cv
+      - displacement_cc (es. 1598, 1968)
+      - fuel_type (benzina / diesel / GPL / metano / ibrido / elettrica)
+      - drivetrain (2WD, 4WD, AWD)
+    note: "OBBLIGATORIO fornire compatibilità completa — senza questo il ricambio NON può essere acquistato con fiducia"
+
+  - name: oem_number
+    required: true
+    note: "Codice OEM produttore originale — critico per match query"
+
+  - name: part_type
+    common_values:
+      - pastiglie freno
+      - dischi freno
+      - filtri (aria, olio, carburante, abitacolo)
+      - batterie
+      - olii (motore, cambio, servosterzo)
+      - pneumatici (estivi / invernali / all season)
+      - candele
+      - ammortizzatori
+      - cinghie (distribuzione, accessori)
+      - luci (lampadine H7, H11, LED, xeno)
+      - tergicristalli
+      - liquido refrigerante / antigelo
+      - bobine accensione
+      - sensori (ossigeno, ABS, parcheggio)
+
+  - name: tire_specs
+    fields_for_tires:
+      - width_mm (es. 225)
+      - aspect_ratio (es. 45)
+      - rim_diameter_inch (es. 17)
+      - load_index (es. 94)
+      - speed_rating (es. Y, V, H, T)
+      - season (estivo, invernale, 4 stagioni)
+      - pattern_name (Pilot Sport 5)
+
+  - name: oil_specs
+    fields_for_oil:
+      - viscosity_sae (es. 5W-30, 10W-40)
+      - api_rating (es. SN, SP)
+      - acea_rating (es. C3, C5)
+      - oem_approval (es. VW 504 00/507 00, MB 229.51)
+      - volume_liters
+
+  - name: battery_specs
+    fields_for_battery:
+      - voltage_v (12V)
+      - capacity_ah (es. 74Ah)
+      - cold_cranking_amps (es. 750A EN)
+      - technology (AGM, EFB, standard)
+      - polarity (positivo destro/sinistro)
+      - dimensions_lwh_mm
+
+  - name: certifications
+    common:
+      - "ECE R90 (ricambi freno CE)"
+      - "ECE R112, ECE R98 (illuminazione)"
+      - "DOT (USA)"
+      - "TUV (tecnico tedesco)"
+      - "API (oli)"
+      - "ACEA (oli EU)"
+      - "E-mark (su prodotti auto EU)"
+
+  - name: product_highlight
+    examples:
+      - "Pastiglie freno anteriori per Volkswagen Golf VII (2012-2020)"
+      - "Codice OEM: 5Q0 698 151 F"
+      - "Materiale: semi-metallico con rivestimento silenzioso"
+      - "Omologazione ECE R90 (sicurezza EU)"
+      - "Spessore 20mm, durata media 50.000 km"
+      - "Include accessori di montaggio (molle, clip)"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Vehicles & Parts > Vehicle Parts & Accessories"
+  common_paths:
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Braking > Motor Vehicle Brake Pads"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Braking > Motor Vehicle Brake Discs"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Engine Parts > Motor Vehicle Oil Filters"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Engine Parts > Motor Vehicle Air Filters"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Lighting > Motor Vehicle Headlights"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Tires"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Batteries"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Parts > Motor Vehicle Fluids > Motor Vehicle Motor Oil"
+    - "Vehicles & Parts > Vehicle Parts & Accessories > Motorcycle Parts"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: prodotto su sfondo bianco, vista principale"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: dettaglio installazione, codice OEM stampato, confezione"
+  - "Per pneumatici: vista frontale battistrada + laterale con dimensioni"
+  - "NO immagini veicolo non specifica — mostra il pezzo"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_branded: true
+    note: "EAN-13 per ricambi branded"
+  mpn:
+    required: true
+    note: "Codice OEM produttore originale — SEMPRE compilato"
+  oem_cross_reference:
+    note: "Codici equivalenti di altri produttori (es. Bosch = Continental = Mann cross ref)"
+  item_group_id:
+    note: "Raggruppa varianti anteriore/posteriore o sinistra/destra"
+
+# ============================================================
+# COMPLIANCE
+# ============================================================
+compliance:
+  - "Ricambi sicurezza (freni, airbag, cinture, lampadine omologate): obbligo ECE / DOT"
+  - "NO ricambi 'non omologati' su GMC per uso stradale"
+  - "Pneumatici: obbligo label EU (efficienza carburante, aderenza bagnato, rumorosità)"
+  - "NO vendita di elettronica aftermarket che aggira centraline (ECU tuning chip) senza omologazione"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "categoria (freni / motore / elettrico / filtri / pneumatici / olii)"
+  custom_label_1: "brand_oe_vs_aftermarket (OE_original / OES / aftermarket / no_name)"
+  custom_label_2: "fascia_prezzo (entry / mid / premium)"
+  custom_label_3: "stagionalita (estivo / invernale / cambio_pneumatici / evergreen)"
+  custom_label_4: "performance (bestseller / steady / slow / promo_stagione)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Compatibilità veicoli completa e precisa (marca + modello + anno + motore)"
+    - "Codice OEM sempre citato"
+    - "Specifiche tecniche numeriche in SI"
+    - "Omologazioni ECE/DOT/TUV/API/ACEA"
+    - "Istruzioni installazione se self-service (difficoltà, tempo)"
+  dont:
+    - "NO compatibilità vaga ('adatto a molte auto')"
+    - "NO 'equivalente originale' senza cross-reference verificato"
+    - "NO tempi di durata senza base ('dura 100.000 km')"
+    - "NO claim performance non documentati ('riduce il consumo del X%')"
+    - "NO installazione fai-da-te per componenti critici (ABS, airbag, cinghia distribuzione)"

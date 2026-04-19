@@ -1,0 +1,174 @@
+# Best practice ELETTRODOMESTICI (Large & Small Appliances)
+# Lavatrici, frigoriferi, forni, lavastoviglie, asciugatrici, cappe,
+# microonde, robot aspirapolvere, friggitrici ad aria, macchine caffè.
+# Fonti: GMC energy label EU, Store Growers furniture/appliance guide 2026.
+
+sector: elettrodomestici
+display_name: Elettrodomestici / Appliances
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {modello} {tipo} {capacita} {classe_energetica} {colore}"
+  formula_examples:
+    - "Bosch WGG254Z0IT Lavatrice 10kg 1400 giri Classe A Bianco"
+    - "Samsung RB38C7B5AS9 Frigorifero combinato 390L No Frost A Inox"
+    - "Electrolux KOBBS21X Forno pirolisi 72L 9 funzioni Inox"
+    - "De Longhi PrimaDonna Soul Macchina caffè automatica 1450W"
+    - "Dyson V15 Detect Absolute Aspirapolvere senza filo 60min"
+  rules:
+    - "Brand + modello tecnico SEMPRE — determinante per matching"
+    - "Capacità = attributo critico (L, kg, porzioni, stoviglie)"
+    - "Classe energetica EU (A/B/C/D/E/F/G) se applicabile"
+    - "Tipo installazione se pertinente (da incasso / libera installazione / colonna / portatile)"
+    - "Tra 80 e 150 char — rispetta limite 70 char critici"
+    - "NO 'best', 'offerta', 'gratis', 'sconto'"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "sconto"
+    - "promozione"
+    - "gratis"
+    - "migliore"
+    - "top"
+    - "esclusivo"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è + dimensione/capacità principale"
+    - "Blocco capacità e dimensioni (LxAxP, peso, carico)"
+    - "Blocco programmi/funzioni (lista concisa)"
+    - "Blocco efficienza energetica (classe, consumo annuo kWh, rumorosità dB)"
+    - "Blocco connettività (WiFi, app, assistenti vocali compatibili)"
+    - "Installazione: requisiti minimi, allacciamento, compatibilità incasso"
+  length:
+    min_chars: 300
+    ideal_chars: 700
+    max_chars: 5000
+  tone:
+    - "Tecnico e concreto: 'capacità 10kg' non 'grande capacità'"
+    - "Numeri specifici per: consumo (kWh/anno), rumore (dB), capacità (L/kg/porzioni), giri centrifuga, tempi ciclo"
+    - "Indica classi energetiche EU 2021+ (A-G)"
+  must_include:
+    - "Dimensioni esterne LxAxP"
+    - "Classe energetica (per EU)"
+    - "Consumo energetico annuo kWh (se applicabile)"
+    - "Capacità utile / volume"
+    - "Livello rumorosità dB (elettrodomestici bianchi)"
+    - "Programmi/funzioni principali"
+
+# ============================================================
+# ATTRIBUTI SPECIFICI
+# ============================================================
+required_attributes:
+  - name: energy_efficiency_class
+    values: [A, B, C, D, E, F, G]
+    required_for_eu: true
+    note: "Obbligatorio dal 1 marzo 2021 per lavatrici/frigo/lavastoviglie/TV/monitor/sorgenti luminose"
+
+  - name: min_energy_efficiency_class
+    note: "Se l'elettrodomestico varia (es. combinato) indica classe minima"
+
+  - name: capacity
+    examples: [8kg, 10kg, 390L, 72L, 14 coperti]
+
+  - name: installation_type
+    values:
+      - libera installazione
+      - da incasso
+      - da colonna
+      - portatile / da tavolo
+      - parete / sottopensile (per cappe)
+
+  - name: noise_level
+    format: "dB(A)"
+    note: "Richiesto su etichetta energetica EU"
+
+  - name: annual_energy_consumption
+    format: "kWh/annum"
+
+  - name: water_consumption
+    note: "Per lavatrici/lavastoviglie — L/ciclo o L/anno"
+
+  - name: color
+    common_values: [bianco, inox, nero, argento, grigio acciaio, rame, beige]
+
+  - name: connectivity
+    values: [WiFi, Bluetooth, NFC, assistenti vocali, app mobile]
+
+  - name: product_highlight
+    rules:
+      - "6-10 bullet, spec concrete"
+    examples:
+      - "Centrifuga fino a 1400 giri/min"
+      - "14 programmi tra cui AutoDose, Rapido 15', Lana delicato"
+      - "Classe A - consumo 51 kWh/anno"
+      - "Rumorosità 48 dB(A) in lavaggio, 72 dB(A) in centrifuga"
+      - "Controllo app Home Connect con ricette e notifiche"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Home & Garden > Household Appliances"
+  common_paths:
+    - "Home & Garden > Household Appliances > Laundry Appliances > Washing Machines"
+    - "Home & Garden > Household Appliances > Laundry Appliances > Dryers"
+    - "Home & Garden > Household Appliances > Kitchen Appliances > Refrigerators"
+    - "Home & Garden > Household Appliances > Kitchen Appliances > Ovens"
+    - "Home & Garden > Household Appliances > Kitchen Appliances > Dishwashers"
+    - "Home & Garden > Household Appliances > Kitchen Appliances > Microwave Ovens"
+    - "Home & Garden > Household Appliances > Kitchen Appliances > Coffee Makers & Espresso Machines"
+    - "Home & Garden > Household Appliances > Floor & Carpet Care > Vacuums"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Air Conditioners"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: prodotto intero su sfondo bianco, vista 3/4 preferibile"
+  - "Min 500x500 (requisito GMC dal 30 giugno 2026)"
+  - "additional_image_link: interno (per frigo/forno/lavatrice), dettaglio comandi, scheda energetica, installazione"
+  - "NO testo sovrapposto (classe energetica separata come additional image o badge Google)"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  mpn:
+    required: true
+    note: "Codice modello è critico — tipicamente su targhetta posteriore"
+  gtin:
+    required_if_brand: true
+  item_group_id:
+    note: "Raggruppa varianti colore (bianco/inox/nero) dello stesso modello"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "fascia_prezzo (entry / mid / premium)"
+  custom_label_1: "classe_energetica (A / B / C / D-G)"
+  custom_label_2: "tipo_installazione (libera / incasso)"
+  custom_label_3: "performance (bestseller / steady / slow)"
+  custom_label_4: "promo (full_price / on_sale / clearance)"
+
+# ============================================================
+# TONO DI VOCE AI
+# ============================================================
+ai_voice:
+  do:
+    - "Tono tecnico-informativo, come una scheda prodotto professionale"
+    - "Cita caratteristiche misurabili (dB, kWh, giri, L, kg)"
+    - "Nomina tecnologie proprietarie del brand (es. 'NoFrost', 'EcoBubble', 'AutoDose')"
+    - "Specifica compatibilità app/assistenti dove presente"
+  dont:
+    - "NO claim 'risparmio fino al X%' senza condizioni specificate"
+    - "NO confronti energetici con modelli non identificati ('consuma meno')"
+    - "NO promesse di durata ('dura una vita')"
+    - "NO marketing vago ('elettrodomestico di design')"

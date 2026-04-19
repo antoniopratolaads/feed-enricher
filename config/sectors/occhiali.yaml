@@ -1,0 +1,202 @@
+# Best practice OCCHIALI (Eyewear)
+# Da sole, vista, sportivi, lenti a contatto, accessori.
+# Fonti: GMC apparel/accessories guide 2026, best practice Ray-Ban/Luxottica.
+
+sector: occhiali
+display_name: Occhiali / Eyewear
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {modello} {tipologia} {montatura_forma} {colore_lente} {calibro}"
+  formula_examples:
+    - "Ray-Ban RB2140 Wayfarer occhiali da sole nero lente verde classica 50mm"
+    - "Persol PO3019S Galleria 900 occhiali da sole tartarugato marrone 52mm"
+    - "Oakley Holbrook OO9102 occhiali sole uomo nero opaco lente Prizm"
+    - "Luxottica Vogue VO5562 occhiali da vista donna rosa 52mm"
+    - "Maui Jim Cliff House MJ256 polarizzati tortoise con lente grigio-neutra"
+  rules:
+    - "Brand + modello con codice (es. RB2140) sempre"
+    - "Tipologia: da sole / da vista / sportivi / lenti a contatto"
+    - "Forma montatura (wayfarer, aviator, round, cat eye, square)"
+    - "Colore montatura + colore lente"
+    - "Calibro in mm (dimensione lente: 47, 50, 52, 54)"
+    - "Polarizzati / categoria protezione se da sole"
+    - "Tra 70 e 150 char"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "imperdibile"
+    - "migliore"
+    - "top"
+    - "esclusivo"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa sono + tipologia + gender + forma"
+    - "Blocco montatura (materiale, colore, dettagli cerniere/aste)"
+    - "Blocco lenti (materiale, trattamenti, categoria protezione, polarizzazione)"
+    - "Blocco misure (calibro lente, ponte, asta — formato 50-22-140)"
+    - "Blocco compatibilità con lenti graduate (se da vista)"
+    - "Blocco cura (panno in microfibra, custodia rigida, no solventi)"
+    - "Blocco garanzia + accessori inclusi (custodia, panno, libretto)"
+  length:
+    min_chars: 250
+    ideal_chars: 600
+    max_chars: 5000
+  tone:
+    - "Tecnico preciso: materiali esatti (acetato di cellulosa, nylon, titanio beta)"
+    - "Cita trattamenti lente (polarizzazione, antiriflesso, anti UV 400, blue light filter)"
+    - "Misure con numeri (50mm calibro, 20mm ponte, 140mm asta)"
+  must_include:
+    - "Materiale montatura"
+    - "Materiale lenti (CR-39, policarbonato, cristallo, Trivex)"
+    - "Categoria protezione sole (0-4, con 3 consigliata per uso quotidiano)"
+    - "Polarizzazione (sì/no)"
+    - "Protezione UV (UV400 = protegge fino a 400nm)"
+    - "Misure complete calibro-ponte-asta"
+    - "Gender"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: eyewear_type
+    values:
+      - occhiali da sole
+      - occhiali da vista
+      - occhiali sportivi
+      - occhiali lettura
+      - lenti a contatto
+      - maschere da sci
+
+  - name: frame_shape
+    values:
+      - wayfarer
+      - aviator
+      - round / tondo
+      - cat eye
+      - square / squadrato
+      - rectangular
+      - clubmaster
+      - oversize
+      - sportivi avvolgenti
+
+  - name: gender
+    values: [male, female, unisex]
+
+  - name: lens_color
+    common_values:
+      - verde classica G-15
+      - grigio neutro
+      - marrone
+      - specchio (specifica colore)
+      - fotocromatica
+      - gialla (sportiva / notturna)
+      - polar G-15 polarizzata
+
+  - name: lens_material
+    values:
+      - policarbonato (resistente agli urti)
+      - CR-39 (plastica standard)
+      - Trivex (leggera resistente)
+      - cristallo minerale (pesante graffi)
+      - NXT (leggera resistente)
+
+  - name: uv_protection
+    values:
+      - UV380
+      - UV400 (standard EU)
+      - UV 100%
+
+  - name: category_of_protection
+    values: [0, 1, 2, 3, 4]
+    note: "EN ISO 12312-1 — 0 bassa protezione, 4 molto scura (non per guida)"
+
+  - name: polarization
+    values: [polarizzata, non polarizzata]
+
+  - name: frame_material
+    common_values:
+      - acetato di cellulosa
+      - metallo (monel, acciaio)
+      - nylon
+      - titanio
+      - titanio beta
+      - TR-90 (ultraleggero sport)
+
+  - name: frame_size
+    format: "calibro-ponte-asta (es. 52-19-140)"
+    note: "3 numeri in mm — spesso stampati sull'asta"
+
+  - name: product_highlight
+    examples:
+      - "Montatura in acetato di cellulosa tortoise"
+      - "Lenti in cristallo polarizzate categoria 3, UV400"
+      - "Calibro 50mm, ponte 19mm, aste 140mm"
+      - "Compatibili con lenti da vista graduate"
+      - "Include custodia rigida Ray-Ban e panno in microfibra"
+      - "Made in Italy"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Apparel & Accessories > Clothing Accessories > Sunglasses"
+  common_paths:
+    - "Apparel & Accessories > Clothing Accessories > Sunglasses"
+    - "Health & Beauty > Personal Care > Vision Care > Eyeglasses"
+    - "Health & Beauty > Personal Care > Vision Care > Contact Lenses"
+    - "Sporting Goods > Outdoor Recreation > Cycling > Cycling Accessories > Bicycle Eyewear"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: vista 3/4 con asta visibile, sfondo bianco"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: vista frontale, laterale, sopra, dettaglio cerniere/aste, custodia inclusa, indossato"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    note: "EAN-13 per occhiali branded (Luxottica, Safilo, EssilorLuxottica, Kering)"
+  mpn:
+    required: true
+    note: "Codice modello (es. RB2140-901, POL3019S-900)"
+  item_group_id:
+    note: "Raggruppa varianti colore montatura/lente dello stesso modello"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "tipologia (sole / vista / sportivi / lenti_a_contatto)"
+  custom_label_1: "gender (uomo / donna / unisex)"
+  custom_label_2: "polarizzazione (polar / no)"
+  custom_label_3: "fascia_prezzo (entry / mid / premium / luxury)"
+  custom_label_4: "performance (bestseller / steady / slow / new_collection)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Misure complete (calibro-ponte-asta)"
+    - "Materiale montatura + lente specifici"
+    - "Categoria protezione + UV"
+    - "Polarizzazione sì/no chiara"
+    - "Compatibilità graduata se da vista"
+  dont:
+    - "NO claim 'protezione totale UV' senza UV400 (tecnicamente non esiste 100%)"
+    - "NO 'guida notturna' per lenti gialle/arancione (fuori legge EU)"
+    - "NO 'anti-fatica visiva' senza studio clinico"
+    - "NO 'modello esclusivo' se è stock normale"

@@ -1,0 +1,186 @@
+# Best practice ARREDAMENTO & HOME (Furniture & Home Décor)
+# Mobili, illuminazione, tessile casa, cucina, bagno, decor, giardino.
+# Fonti: GMC furniture attribute guide 2026, Store Growers.
+
+sector: arredamento
+display_name: Arredamento / Furniture & Home
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {tipo_prodotto} {materiale} {colore_finitura} {dimensioni}"
+  formula_examples:
+    - "IKEA MALM Comò 6 cassetti impiallacciatura rovere 160x78 cm"
+    - "Calligaris Skin Divano 3 posti tessuto grigio 220x92 cm"
+    - "Flos IC Lights T1 High lampada da tavolo ottone spazzolato"
+    - "Kartell Masters sedia policarbonato nero impilabile"
+    - "Sambonet Linea Q tovaglia cotone lino 140x220 cm crema"
+  rules:
+    - "Tipo prodotto subito dopo brand (è la query primaria)"
+    - "Materiale + finitura = critici per arredamento (rovere, noce, velluto, marmo, ottone)"
+    - "Dimensioni SEMPRE in cm, formato LxPxA (larghezza x profondità x altezza)"
+    - "Numero posti/cassetti/ripiani quando applicabile"
+    - "Tra 80 e 150 char"
+    - "NO 'design', 'moderno', 'elegante' (qualificatori vaghi = disapprovazione)"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "sconto"
+    - "elegante"
+    - "ricercato"
+    - "di design"  # qualificatore vago
+    - "moderno"
+    - "esclusivo"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cos'è + dove si usa + numero posti/ripiani/cassetti"
+    - "Blocco materiali e finiture (specifico: 'massello di faggio', 'MDF laccato', 'velluto 280gsm')"
+    - "Blocco dimensioni complete (LxPxA + peso)"
+    - "Blocco costruzione (montaggio richiesto? istruzioni? ferramenta inclusa?)"
+    - "Blocco manutenzione (panno umido, lavabile, pelle da trattare annualmente)"
+    - "Blocco garanzia e provenienza (prodotto in Italia, garanzia 2 anni)"
+  length:
+    min_chars: 300
+    ideal_chars: 700
+    max_chars: 5000
+  tone:
+    - "Descrittivo, materiale concreto: 'rovere massello spazzolato' non 'legno pregiato'"
+    - "Numeri: portata max (kg), densità imbottitura (kg/m³), altezza seduta (cm)"
+    - "Include istruzioni montaggio se flatpack (numero pezzi, tempo stimato)"
+  must_include:
+    - "Dimensioni LxPxA + peso"
+    - "Materiali principali con percentuali se rilevanti"
+    - "Colore + finitura (opaco, lucido, laccato)"
+    - "Portata massima per sedute/mensole/tavoli"
+    - "Montaggio (assemblato / flatpack)"
+    - "Origine se Made in Italy / EU (differenziatore)"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: material
+    rules:
+      - "Materiale principale per primo"
+      - "Per compositi: 'MDF impiallacciato rovere', 'acciaio verniciato a polvere'"
+    common_values:
+      - "massello (faggio, rovere, noce, pino)"
+      - "MDF, truciolare, compensato"
+      - "metallo (acciaio, ferro, ottone, alluminio)"
+      - "tessuto (cotone, lino, velluto, ciniglia, microfibra)"
+      - "pelle, ecopelle"
+      - "plastica (policarbonato, ABS, polipropilene)"
+      - "vetro temperato, cristallo"
+      - "ceramica, marmo, travertino"
+
+  - name: size
+    format: "LxPxA cm"
+    examples:
+      - "160x78x45 cm (comò)"
+      - "220x92x85 cm (divano 3 posti)"
+      - "140 cm (tavolo ovale lungh.)"
+
+  - name: color
+    rules:
+      - "Usa nome colore ARREDO (tortora, cipria, sabbia, antracite, canna di fucile)"
+      - "Aggiungi nome colore marketing se applicabile (es. 'Stone Grey')"
+
+  - name: pattern
+    values: [tinta unita, righe, geometrico, floreale, astratto, animalier, vintage]
+
+  - name: room_type
+    note: "Ambiente d'uso (camera, soggiorno, bagno, cucina, ufficio, esterno)"
+
+  - name: style
+    note: "Solo se coerente con catalogo — evita termini vaghi"
+    values: [scandinavo, industrial, classico, contemporaneo, shabby, mid-century]
+
+  - name: number_of_seats
+    note: "Per sedute: divani, poltrone, sgabelli"
+
+  - name: load_capacity
+    note: "Portata max kg — per mensole, tavoli, sedie, scaffali"
+
+  - name: assembly_required
+    values: [yes, no]
+
+  - name: product_highlight
+    examples:
+      - "Struttura in faggio massello con finitura naturale oliata"
+      - "Seduta imbottita 35kg/m³, rivestimento velluto sfoderabile"
+      - "Dimensioni 220 x 92 x 85 cm, altezza seduta 45 cm"
+      - "Portata max 200 kg, 3 posti comodi"
+      - "Montaggio flatpack, ferramenta inclusa, 45 min stimati"
+      - "Prodotto in Italia, garanzia 5 anni su struttura"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Furniture"
+  common_paths:
+    - "Furniture > Sofas"
+    - "Furniture > Chairs"
+    - "Furniture > Tables > Dining Tables"
+    - "Furniture > Tables > Coffee Tables"
+    - "Furniture > Beds & Accessories > Beds"
+    - "Furniture > Cabinets & Storage > Dressers"
+    - "Furniture > Cabinets & Storage > Wardrobes"
+    - "Furniture > Office Furniture > Desks"
+    - "Furniture > Outdoor Furniture"
+    - "Home & Garden > Decor > Lighting > Lamps"
+    - "Home & Garden > Linens & Bedding > Bedding"
+    - "Home & Garden > Kitchen & Dining > Cookware"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: prodotto su sfondo bianco o neutro, vista 3/4"
+  - "Min 500x500 (obbligatorio GMC dal 30 giugno 2026), ideale 2000x2000"
+  - "additional_image_link: vista frontale, laterale, retro, dettaglio materiale, in ambiente (staged)"
+  - "Per mobili grandi: includi immagine con persona/oggetto scala per percezione dimensioni"
+  - "NO testo/watermark su main image"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    note: "Arredamento ha spesso GTIN solo per prodotti mass-market (IKEA, Maisons du Monde)"
+  mpn:
+    required: true
+    note: "Codice articolo brand — critico per arredamento custom o pezzi singoli"
+  item_group_id:
+    note: "Raggruppa varianti colore/dimensione/finitura del medesimo modello"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "fascia_prezzo (entry / mid / premium / luxury)"
+  custom_label_1: "ambiente (camera / soggiorno / bagno / cucina / ufficio / esterno)"
+  custom_label_2: "stile (scandinavo / classico / industrial / contemporaneo)"
+  custom_label_3: "performance (bestseller / steady / slow / new)"
+  custom_label_4: "stock (in_stock / low_stock / made_to_order)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Materiali specifici (es. 'rovere massello oliato', 'velluto 300gsm')"
+    - "Dimensioni ovunque (LxPxA, altezza seduta, portata kg)"
+    - "Provenienza e artigianalità se reali (Made in Italy, lavorazione artigianale)"
+    - "Manutenzione pratica (come pulire, quando trattare)"
+  dont:
+    - "NO 'elegante', 'raffinato', 'di design' senza supporto"
+    - "NO claim sostenibilità senza certificazione (FSC, PEFC, OEKO-TEX)"
+    - "NO confronti con altri brand"
+    - "NO 'pezzo unico' se è industriale"
