@@ -250,13 +250,30 @@ def enrich_dataframe(
     sector: str = "",
     overwrite_title_description: bool = True,
 ) -> pd.DataFrame:
-    """Arricchisce l'intero dataframe in parallelo."""
+    """Arricchisce l'intero dataframe in parallelo.
+
+    Args:
+        sector: può essere:
+            - stringa vuota: prompt generico
+            - nome settore (es. 'abbigliamento'): applica best practice del settore
+            - 'auto': auto-classifica ogni prodotto e applica il settore rilevato
+    """
     client = Anthropic(api_key=api_key)
     df = df.copy()
 
     work_df = df.head(limit) if limit else df
     indices = work_df.index.tolist()
     total = len(indices)
+
+    # Auto-detect sector per-row quando sector=='auto'
+    per_row_sector: dict = {}
+    if sector == "auto":
+        try:
+            from . import sector_classifier
+            detected = sector_classifier.apply_to_enrichment(work_df)
+            per_row_sector = detected.to_dict()
+        except Exception:
+            per_row_sector = {}
 
     # nomi UFFICIALI Google/Meta (no più suffisso _ai)
     official_cols = [
@@ -266,7 +283,7 @@ def enrich_dataframe(
         "product_highlight", "product_detail",
         "unit_pricing_measure", "unit_pricing_base_measure",
         "shipping_weight", "is_bundle", "multipack",
-        "keywords", "_enrichment_status",
+        "keywords", "_enrichment_status", "_detected_sector",
     ]
     for c in official_cols:
         if c not in df.columns:
@@ -281,7 +298,14 @@ def enrich_dataframe(
 
     def _task(idx):
         row = df.loc[idx].to_dict()
-        result = enrich_product(client, row, model=model, sector=sector)
+        # Resolve effective sector for this row
+        if sector == "auto":
+            effective_sector = per_row_sector.get(idx) or ""
+        else:
+            effective_sector = sector
+        result = enrich_product(client, row, model=model, sector=effective_sector)
+        if effective_sector:
+            result.setdefault("_detected_sector", effective_sector)
         return idx, result
 
     done = 0
@@ -295,6 +319,8 @@ def enrich_dataframe(
             kw = result.get("keywords", [])
             df.at[idx, "keywords"] = ", ".join(kw) if isinstance(kw, list) else str(kw)
             df.at[idx, "_enrichment_status"] = result.get("_enrichment_status", "")
+            if result.get("_detected_sector"):
+                df.at[idx, "_detected_sector"] = result["_detected_sector"]
 
             # NUOVI CAMPI GMC (solo se desumibili)
             ph = result.get("product_highlight", [])

@@ -53,10 +53,24 @@ df = st.session_state["feed_df"]
 c1, c2, c3, c4 = st.columns(4)
 model = c1.selectbox("Modello", ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"], index=0)
 
-sectors = ["(generico)"] + list_sectors()
-sector_choice = c2.selectbox("Settore (best practice)", sectors, index=1 if "abbigliamento" in sectors else 0,
-                              help="Carica regole settoriali dal YAML in config/sectors/")
-sector = "" if sector_choice == "(generico)" else sector_choice
+sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
+default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
+sector_choice = c2.selectbox(
+    "Settore (best practice)",
+    sectors,
+    index=default_idx,
+    help=(
+        "• (generico): prompt base, nessuna specializzazione\n"
+        "• auto (multi-settore): il tool classifica ogni prodotto e applica le regole del suo settore\n"
+        "• settore specifico: applica best practice YAML di quel settore a TUTTI i prodotti"
+    ),
+)
+if sector_choice == "(generico)":
+    sector = ""
+elif sector_choice.startswith("✨ auto"):
+    sector = "auto"
+else:
+    sector = sector_choice
 
 limit = c3.number_input("Limite prodotti (0 = tutti)", min_value=0, value=min(50, len(df)), step=10)
 workers = c4.slider("Parallelismo", 1, 15, 5)
@@ -68,7 +82,35 @@ overwrite = st.checkbox(
          "Vengono anche popolati colore/taglia/materiale/brand se mancanti."
 )
 
-if sector:
+if sector == "auto":
+    with st.expander("🔎 Anteprima classificazione automatica", expanded=True):
+        from utils import sector_classifier
+        preview_df = df.head(limit) if limit else df
+        with st.spinner(f"Classifico {len(preview_df)} prodotti..."):
+            summary = sector_classifier.summarize(preview_df)
+        st.caption(
+            "Ogni prodotto riceverà le regole del settore rilevato. "
+            "I prodotti non classificati (nessun match) useranno il prompt generico."
+        )
+        st.dataframe(summary, use_container_width=True, height=min(40 + len(summary) * 38, 320),
+                      column_config={
+                          "_sector_detected": st.column_config.TextColumn("Settore rilevato", width="medium"),
+                          "_sector_confidence": st.column_config.TextColumn("Confidence"),
+                          "count": st.column_config.NumberColumn("Prodotti", width="small"),
+                      })
+        # Quick sample table
+        full_detect = sector_classifier.classify_dataframe(preview_df.head(20))
+        st.caption("**Esempio prime 20 righe:**")
+        st.dataframe(
+            full_detect[[c for c in ("id", "title", "_sector_detected", "_sector_confidence")
+                         if c in full_detect.columns]].rename(columns={
+                "_sector_detected": "settore",
+                "_sector_confidence": "conf.",
+            }),
+            use_container_width=True, height=260,
+        )
+
+if sector and sector != "auto":
     with st.expander(f"📚 Best practice attive: {sector}"):
         s = load_sector(sector)
         if s.get("title", {}).get("formula"):

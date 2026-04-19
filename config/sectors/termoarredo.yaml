@@ -1,0 +1,224 @@
+# Best practice TERMOARREDO (Heated Towel Rails, Radiators, Electric Heaters)
+# Radiatori, scaldasalviette, termoarredi elettrici + idraulici, riscaldamento a pavimento.
+# Fonti: GMC heating, EU ErP (Energy-related Products) directive 2009/125, EN 442 radiators.
+
+sector: termoarredo
+display_name: Termoarredo / Radiatori / Scaldasalviette
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {modello} {tipo} {dimensioni} {interasse_attacchi} {potenza_watt} {colore}"
+  formula_examples:
+    - "Irsap Ares 1120x506 scaldasalviette ad acqua 635W bianco attacchi 50mm"
+    - "Zehnder Klaro scaldasalviette verniciato bianco 1186x450 551W"
+    - "Tubes Basics scaldasalviette elettrico 1000W 1250x500 cromo"
+    - "DeLonghi HCX 9124 termoventilatore ceramico 2400W bianco"
+    - "Cordivari Lisa scaldasalviette doppio 1800x500 1245W bianco"
+  rules:
+    - "Brand + modello/linea (Irsap Ares, Zehnder Klaro, Tubes Basics)"
+    - "Tipo: ad acqua (idraulico) / elettrico / misto"
+    - "Dimensioni HxL in mm (altezza x larghezza) SEMPRE"
+    - "Interasse attacchi (50mm / 500mm / 600mm) per idraulici"
+    - "Potenza termica in watt a ΔT 50°C (EN 442)"
+    - "Colore finitura"
+    - "Tra 80 e 150 char"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "sconto"
+    - "gratis"
+    - "migliore"
+    - "top"
+    - "esclusivo"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: tipologia (radiatore / scaldasalviette / termoarredo) + ambiente d'uso (bagno / cucina / soggiorno)"
+    - "Blocco tipo alimentazione (ad acqua calda sanitaria / elettrico / misto idro-elettrico)"
+    - "Blocco potenza termica in W secondo EN 442 (ΔT 50°C)"
+    - "Blocco dimensioni (HxLxP mm) + peso kg"
+    - "Blocco materiali (acciaio tubolare, alluminio pressofuso, ghisa, inox)"
+    - "Blocco verniciatura (polveri epossidiche, cromato, inox lucido/satinato)"
+    - "Blocco attacchi idraulici (interasse, filettatura, centrale/laterale)"
+    - "Blocco installazione (staffe a muro incluse, distanza minima)"
+    - "Blocco consumo elettrico + termostato (per modelli elettrici)"
+    - "Blocco certificazioni (CE, marcatura ErP lotto 20)"
+  length:
+    min_chars: 300
+    ideal_chars: 700
+    max_chars: 5000
+  tone:
+    - "Tecnico: 'potenza termica 635W a ΔT 50°C EN 442' non 'scalda bene'"
+    - "Numeri specifici: dimensioni mm, watt, pressione max bar, temperatura max °C"
+  must_include:
+    - "Tipo alimentazione (acqua / elettrico / misto)"
+    - "Dimensioni HxL mm + interasse attacchi"
+    - "Potenza termica watt (con specifica EN 442 ΔT 50°C)"
+    - "Materiale + verniciatura"
+    - "Pressione max di esercizio (bar) per idraulici"
+    - "Temperatura max °C"
+    - "Peso kg"
+    - "Per elettrici: consumo + termostato"
+
+# ============================================================
+# ATTRIBUTI
+# ============================================================
+required_attributes:
+  - name: heating_type
+    values:
+      - ad acqua / idraulico
+      - elettrico
+      - misto (idro + elettrico)
+      - a convezione forzata (termoventilatore)
+      - a raggi infrarossi
+
+  - name: product_type
+    values:
+      - scaldasalviette
+      - radiatore / termoarredo da parete
+      - termoarredo da pavimento
+      - termoventilatore
+      - convettore elettrico
+      - scaldabagno ad accumulo
+      - piastra radiante
+
+  - name: thermal_power_watts
+    required: true
+    note: "Potenza termica in watt a ΔT 50°C (standard EN 442)"
+
+  - name: dimensions
+    format: "HxLxP mm"
+    examples: ["1120x506x100", "1500x600x90", "800x400x35"]
+
+  - name: axis_distance_mm
+    note: "Interasse attacchi per modelli ad acqua (50, 500, 600, 1500mm)"
+
+  - name: material
+    values:
+      - acciaio tubolare (verniciato)
+      - alluminio pressofuso
+      - ghisa
+      - inox (304 / 316)
+      - acciaio al carbonio
+
+  - name: finish
+    common_values:
+      - bianco (RAL 9016)
+      - nero (RAL 9005)
+      - cromato
+      - inox lucido
+      - inox satinato
+      - antracite / grigio / grafite
+      - colori RAL custom
+      - effetto legno
+
+  - name: max_pressure_bar
+    note: "Pressione massima di esercizio (tipicamente 8-10 bar per residenziale)"
+
+  - name: max_temperature_c
+    note: "Temperatura massima fluido (tipicamente 110°C)"
+
+  - name: hydraulic_connections
+    fields:
+      - thread_size (es. 1/2\", 3/4\")
+      - position (centrale / laterale / basso)
+      - number_of_connections (2, 4 per modelli misti)
+
+  - name: mounting
+    values:
+      - a parete (staffe incluse)
+      - a pavimento
+      - a incasso
+
+  - name: electric_specs
+    fields_for_electric:
+      - voltage_v (220-240V AC 50Hz)
+      - power_w (800, 1000, 1500, 2000W)
+      - thermostat (integrato elettronico / meccanico / NO)
+      - remote_control (WiFi, app, infrarossi, NO)
+      - energy_class (A, A+, A++ se applicabile)
+      - ip_rating (IP44 per bagno, IP24 base)
+
+  - name: certifications
+    common:
+      - "CE (obbligatorio EU)"
+      - "EN 442 (radiatori e convettori)"
+      - "Marcatura ErP Lotto 20 (efficienza apparecchi riscaldamento locali)"
+      - "IMQ (Italia)"
+      - "TÜV / VDE (Germania)"
+      - "NF (Francia)"
+
+  - name: product_highlight
+    examples:
+      - "Scaldasalviette ad acqua con potenza termica 635W (ΔT 50°C EN 442)"
+      - "Dimensioni 1120x506 mm, interasse attacchi 50mm"
+      - "Struttura acciaio tubolare verniciato bianco RAL 9016"
+      - "Pressione max 8 bar, temperatura max 110°C"
+      - "Staffe di fissaggio e tappi ciechi inclusi"
+      - "Marcatura CE + EN 442 certificata"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Hardware > Plumbing > Heating & Cooling"
+  common_paths:
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Space Heaters"
+    - "Home & Garden > Household Appliances > Climate Control Appliances > Electric Heaters"
+    - "Hardware > Plumbing > Heating & Cooling > Radiators"
+    - "Hardware > Plumbing > Plumbing Fixture Parts > Towel Bars & Holders > Heated Towel Rails"
+    - "Home & Garden > Household Appliances > Water Heaters"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: prodotto isolato su sfondo bianco, vista frontale"
+  - "Min 500x500 (GMC dal 30 giugno 2026)"
+  - "additional_image_link: vista laterale (profondità), attacchi idraulici, dettaglio finitura, installato in ambiente"
+  - "Per cromati/inox: illuminazione diffusa per evitare riflessi forti"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    note: "EAN-13 per termoarredo branded (Irsap, Zehnder, Tubes, Caleffi)"
+  mpn:
+    required: true
+    note: "Codice articolo produttore (spesso alfanumerico con dimensioni codificate)"
+  item_group_id:
+    note: "Raggruppa varianti dimensione/colore dello stesso modello"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "tipo (scaldasalviette / radiatore / termoventilatore / scaldabagno)"
+  custom_label_1: "alimentazione (acqua / elettrico / misto)"
+  custom_label_2: "fascia_prezzo (entry / mid / premium / design)"
+  custom_label_3: "stagionalita (inverno / evergreen)"
+  custom_label_4: "performance (bestseller / steady / slow / promo)"
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Dati tecnici misurabili: watt termici, bar pressione, mm interasse"
+    - "Normative esplicite (EN 442, ErP lotto 20, CE, IP)"
+    - "Materiali specifici (acciaio tubolare verniciato, alluminio pressofuso)"
+    - "Compatibilità impiantistica (ideale per caldaia a condensazione / pompa calore)"
+    - "Classi energetiche per modelli elettrici"
+  dont:
+    - "NO claim risparmio senza condizioni ('scalda più velocemente del X%')"
+    - "NO 'design' vago senza dato concreto"
+    - "NO installazione fai-da-te per componenti idraulici (normativa UNI 10738)"
+    - "NO promesse di comfort non misurabili ('diffonde calore omogeneo')"
