@@ -127,8 +127,49 @@ else:
                "🔴 Errore" if s.startswith("error") else
                "🟡 Vuoto" if s.startswith("empty") else "⚪ —")
 
-    display_cols = [c for c in ("id", "title", "brand", "price", "_enrichment_status")
-                     if c in filtered.columns]
+    # Vista toggle: compatta (essenziale) vs estesa (TUTTI i campi GMC popolati)
+    view_mode = st.radio(
+        "Vista tabella",
+        options=["Compatta", "Estesa (tutti gli attributi GMC)",
+                  "Solo Google", "Solo Meta"],
+        index=0, horizontal=True, key="_view_mode",
+        label_visibility="collapsed",
+        help="Compatta = 5 colonne base · Estesa = tutti i campi GMC popolati · "
+             "Solo Google / Solo Meta = colonne specifiche per piattaforma",
+    )
+
+    from utils.catalog_optimizer import GOOGLE_FIELDS as _GFL, META_FIELDS as _MFL
+
+    if view_mode == "Compatta":
+        display_cols = [c for c in ("id", "title", "brand", "price", "_enrichment_status")
+                         if c in filtered.columns]
+    elif view_mode == "Estesa (tutti gli attributi GMC)":
+        order = [t for t, _, _, _ in _GFL] + \
+                [t for t, _, _ in _MFL if t not in {x for x, _, _, _ in _GFL}]
+        # Tieni _enrichment_status alla fine per badge
+        display_cols = ["id"] + [c for c in order if c != "id" and c in filtered.columns]
+        # Filtra colonne totalmente vuote per non rumorose
+        display_cols = [c for c in display_cols
+                         if c in ("id", "_enrichment_status") or
+                         filtered[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+        display_cols.append("_enrichment_status") if "_enrichment_status" in filtered.columns and "_enrichment_status" not in display_cols else None
+    elif view_mode == "Solo Google":
+        order = [t for t, _, _, _ in _GFL]
+        display_cols = [c for c in order if c in filtered.columns]
+        display_cols = [c for c in display_cols
+                         if c == "id" or
+                         filtered[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+        if "_enrichment_status" in filtered.columns:
+            display_cols.append("_enrichment_status")
+    else:  # Solo Meta
+        order = [t for t, _, _ in _MFL]
+        display_cols = [c for c in order if c in filtered.columns]
+        display_cols = [c for c in display_cols
+                         if c == "id" or
+                         filtered[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+        if "_enrichment_status" in filtered.columns:
+            display_cols.append("_enrichment_status")
+
     display_df = filtered[display_cols].copy()
     display_df.insert(0, "✔ Seleziona", False)
     if "_enrichment_status" in display_df.columns:
@@ -161,22 +202,36 @@ else:
         display_df["✔ Seleziona"] = display_df.index.isin(forced)
         st.session_state["_force_sel"] = None
 
+    _col_cfg_table = {
+        "✔ Seleziona": st.column_config.CheckboxColumn(width="small", pinned=True),
+        "id":          st.column_config.TextColumn(width="medium"),
+        "title":       st.column_config.TextColumn(width="large"),
+        "description": st.column_config.TextColumn(width="large"),
+        "brand":       st.column_config.TextColumn(width="small"),
+        "price":       st.column_config.TextColumn(width="small"),
+        "product_highlight":       st.column_config.TextColumn(width="large"),
+        "product_detail":          st.column_config.TextColumn(width="large"),
+        "google_product_category": st.column_config.TextColumn(width="medium"),
+        "product_type":            st.column_config.TextColumn(width="medium"),
+        "title_meta":              st.column_config.TextColumn(width="large"),
+        "short_description":       st.column_config.TextColumn(width="medium"),
+        "rich_text_description":   st.column_config.TextColumn(width="large"),
+        "Stato": st.column_config.TextColumn(width="small",
+                    help="🟢 OK · 🔵 Cache · 🔴 Errore · 🟡 Vuoto · ⚪ non arricchito"),
+    }
+    _height = 480 if view_mode != "Compatta" else 380
     edited = st.data_editor(
         display_df,
-        use_container_width=True, height=380, hide_index=True,
-        column_config={
-            "✔ Seleziona": st.column_config.CheckboxColumn(width="small", pinned=True),
-            "id": st.column_config.TextColumn(width="medium"),
-            "title": st.column_config.TextColumn(width="large"),
-            "brand": st.column_config.TextColumn(width="small"),
-            "price": st.column_config.TextColumn(width="small"),
-            "Stato": st.column_config.TextColumn(width="small",
-                        help="🟢/🔵 arricchito · 🔴 errore · ⚪ non arricchito"),
-        },
+        use_container_width=True, height=_height, hide_index=True,
+        column_config=_col_cfg_table,
         disabled=[c for c in display_df.columns if c != "✔ Seleziona"],
-        key="_edit_selection",
+        key=f"_edit_selection_{view_mode}",
     )
     selected_indices = edited.index[edited["✔ Seleziona"]].tolist()
+
+    if view_mode != "Compatta":
+        st.caption(f"_Mostrate **{len(display_cols) - 1}** colonne attributi "
+                    f"(solo popolate). Scrolla orizzontalmente per vederle tutte._")
 
     st.markdown(
         f"<div style='background:#EEF4FF; border:1px solid #DCE7FE; border-radius:10px; "
