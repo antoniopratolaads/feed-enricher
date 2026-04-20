@@ -654,8 +654,41 @@ pre code {
 """
 
 
+_SIDEBAR_FORCE_OPEN_JS = """
+<script>
+(function ensureSidebarOpen() {
+    const tryOpen = () => {
+        const sb = window.parent.document.querySelector('[data-testid="stSidebar"]');
+        if (!sb) { return false; }
+        // Se il sidebar è visualmente collapsed, clicca il pulsante di riapertura
+        if (sb.getAttribute('aria-expanded') === 'false') {
+            const reopen = window.parent.document.querySelector(
+                '[data-testid="stSidebarCollapsedControl"] button, ' +
+                '[data-testid="stSidebarCollapsedControl"]'
+            );
+            if (reopen) { reopen.click(); return true; }
+        }
+        // Inoltre forza stili inline per bypassare emotion CSS
+        sb.style.setProperty('min-width', '244px', 'important');
+        sb.style.setProperty('max-width', '340px', 'important');
+        sb.style.setProperty('width', '300px', 'important');
+        sb.style.setProperty('transform', 'none', 'important');
+        sb.style.setProperty('visibility', 'visible', 'important');
+        return true;
+    };
+    // Retry finché DOM pronto
+    let tries = 0;
+    const iv = setInterval(() => {
+        if (tryOpen() || ++tries > 40) clearInterval(iv);
+    }, 150);
+})();
+</script>
+"""
+
+
 def apply_theme():
     st.markdown(HORIZON_CSS, unsafe_allow_html=True)
+    st.markdown(_SIDEBAR_FORCE_OPEN_JS, unsafe_allow_html=True)
 
 
 def page_header(title: str, subtitle: str = ""):
