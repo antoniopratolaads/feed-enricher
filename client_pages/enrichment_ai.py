@@ -448,13 +448,63 @@ with tabs[2]:
         column_config=_col_cfg,
     )
 
-dc1, dc2 = st.columns(2)
-dc1.download_button("Excel arricchito", to_excel_bytes({"enriched": enriched}),
-                     "feed_enriched.xlsx",
-                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                     use_container_width=True)
-dc2.download_button("CSV arricchito", enriched.to_csv(index=False).encode("utf-8"),
-                     "feed_enriched.csv", "text/csv", use_container_width=True)
+from utils.catalog_optimizer import build_google_feed, build_meta_feed
+
+st.markdown("#### Download")
+st.caption(
+    "**TSV Google / CSV Meta** = pronti per upload diretto (colonne = nomi ufficiali GMC/Meta Commerce, "
+    "price/condition/availability normalizzati, title/description troncati ai limiti). "
+    "**Raw** = dump completo per audit o elaborazione custom (include colonne interne e originali)."
+)
+
+dc1, dc2, dc3, dc4 = st.columns(4)
+
+# TSV Google-ready (filtra solo campi ufficiali GMC)
+try:
+    _google_ready = build_google_feed(enriched, currency="EUR")
+    dc1.download_button(
+        "⬇️ TSV Google (GMC-ready)",
+        _google_ready.to_csv(index=False, sep="\t").encode("utf-8"),
+        file_name="google_feed.tsv",
+        mime="text/tab-separated-values",
+        use_container_width=True,
+        help="Upload diretto su Google Merchant Center → Feed → Aggiungi → Carica file TSV.",
+    )
+except Exception as _e:
+    dc1.warning(f"Google feed: {_e}")
+
+# CSV Meta-ready (filtra solo campi ufficiali Meta)
+try:
+    _meta_ready = build_meta_feed(enriched, currency="EUR")
+    dc2.download_button(
+        "⬇️ CSV Meta (Commerce-ready)",
+        _meta_ready.to_csv(index=False).encode("utf-8"),
+        file_name="meta_feed.csv",
+        mime="text/csv",
+        use_container_width=True,
+        help="Upload diretto su Meta Commerce Manager → Cataloghi → Aggiungi prodotti → Da file di dati.",
+    )
+except Exception as _e:
+    dc2.warning(f"Meta feed: {_e}")
+
+# Excel multi-foglio
+dc3.download_button(
+    "Excel arricchito",
+    to_excel_bytes({"enriched": enriched}),
+    "feed_enriched.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    use_container_width=True,
+    help="Excel con tutti i dati arricchiti (raw, per audit).",
+)
+# CSV raw (tutti i campi, per debug / integrazione custom)
+dc4.download_button(
+    "CSV raw (tutti i campi)",
+    enriched.to_csv(index=False).encode("utf-8"),
+    "feed_enriched_raw.csv",
+    "text/csv",
+    use_container_width=True,
+    help="Include anche colonne interne (_enrichment_status, title_original, ecc.). NON uploadabile GMC/Meta.",
+)
 
 # ============================================================
 # QUALITY — taxonomy suggestions + spell check
