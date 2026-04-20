@@ -65,164 +65,50 @@ def _sector_brief(sector: dict) -> str:
             parts.append("EVITA:\n- " + "\n- ".join(dont))
     return "\n".join(parts)
 
-SYSTEM_PROMPT_BASE = """Sei un esperto di e-commerce specializzato in feed Google Merchant Center e Meta Catalog.
-Ricevi un prodotto con titolo, descrizione, brand, eventuali metriche (clicks, conversioni, ROAS, vendite Shopify, viste).
+SYSTEM_PROMPT_BASE = """Esperto feed Google Merchant + Meta Catalog. Estrai/inferisci il massimo di attributi GMC ufficiali dal prodotto dato. Output = JSON diretto per feed supplementare GMC (nomi 1:1 spec GMC 2026).
 
-IL TUO COMPITO: estrarre / inferire il MASSIMO NUMERO di attributi usando i NOMI UFFICIALI Google.
-L'output deve essere DIRETTAMENTE utilizzabile come feed supplementare su Google Merchant Center
-(i nomi dei campi corrispondono 1:1 alla specifica ufficiale GMC 2026).
+Se arrivano metriche: zombie/no_clicks → titolo aggressivo + keyword search-friendly; bestseller → messaggio vincente; alte viste poche conv → benefici/differenziatori.
 
-USA le metriche performance per calibrare il tono:
-- zombie/no_clicks → titolo più aggressivo, attributi in evidenza, keyword search-friendly
-- bestseller → mantieni il messaggio vincente
-- alte viste e poche conversioni → descrizione punta su benefici e differenziatori
+Output UN SOLO JSON valido, senza markdown, senza ```. Ometti chiavi con valori vuoti. Non inventare dati: se non desumibile, escludi la chiave.
 
-RESTITUISCI UN UNICO JSON valido con i seguenti NOMI UFFICIALI GMC (spec https://support.google.com/merchants/answer/7052112).
-Ometti le chiavi che iniziano con "_comment_" dalla risposta — servono solo a organizzare questa spec.
-Per ogni campo: popolalo se desumibile, altrimenti stringa vuota "" o array vuoto [].
+Campi GMC (usa questi nomi esatti, ometti quelli vuoti):
+- title (70-150ch, Brand+Prodotto+Attributi chiave) · description (200-5000ch, descrittivo no promo)
+- google_product_category (path completo) · product_type (merchant 2-3 livelli)
+- brand · gtin (solo cifre 8/12/13/14) · mpn · identifier_exists (no se mancano gtin+mpn) · item_group_id
+- gender (male|female|unisex) · age_group (newborn|infant|toddler|kids|adult) · adult (yes|no)
+- color (max 3, '/') · size · size_system (EU|US|UK|IT|...) · size_type (regular|petite|plus|maternity|big and tall)
+- material (con %) · pattern (tinta unita|righe|quadri|floreale|animalier|...)
+- condition (new|refurbished|used) · availability (in_stock|out_of_stock|preorder|backorder)
+- availability_date · expiration_date (YYYY-MM-DD)
+- unit_pricing_measure (es. '50 ml') · unit_pricing_base_measure (es. '100 ml')
+- is_bundle (yes|no) · multipack (numero)
+- shipping_weight · shipping_length/width/height · shipping_label · ships_from_country (ISO-2)
+- min_handling_time · max_handling_time · transit_time_label
+- energy_efficiency_class (A-G) · min_energy_efficiency_class · max_energy_efficiency_class
+- certification (array [{authority,name,code}] es. [{"authority":"EC","name":"EPREL","code":"M/2021/1234"}])
+- product_highlight (array 6-10 bullet max 150ch, feature/spec misurabili)
+- product_detail (array [{section_name,attribute_name,attribute_value}] 8-20 entries per INFO NON COPERTE SOPRA: Specifiche tecniche, Connettività, Nella confezione, Compatibilità, Composizione [ingredienti/allergeni/principio attivo], Forma farmaceutica, Posologia, Animale [specie, età], Dimensioni, Origine, Valori nutrizionali, Alimentazione, Installazione)
+- video_link · lifestyle_image_link
+- included_destination · excluded_destination (array) · tax_category
+- custom_label_0 (stagione) · custom_label_1 (fascia_prezzo) · custom_label_2 (uso/occasione) · custom_label_3 · custom_label_4
 
-{
-  "_comment_A": "===== TESTI (GMC core) =====",
-  "title": "Titolo GMC 70-150 char · Formula: Brand + Prodotto + Attributi chiave",
-  "description": "Descrizione GMC 200-5000 char · tono descrittivo, NO promozionale",
+Campi META Catalog (nomi ufficiali Meta Commerce):
+- title_meta (Meta title fino 200ch, più descrittivo)
+- short_description (Meta max 200ch)
+- rich_text_description (HTML Meta: <b><i><u><br><ul><li>)
+- fb_product_category · origin_country (ISO-2)
+- manufacturer_info (nome+indirizzo produttore, EU GPSR reg 2023/988)
+- importer_name · importer_address (extra-EU GPSR)
+- commerce_tax_category (STANDARD|FOOD|BOOKS|...)
+- custom_number_0..4 · status (active|archived|staging)
+- video (array [{tag,url}])
 
-  "_comment_B": "===== TASSONOMIA =====",
-  "google_product_category": "Path COMPLETO Google Taxonomy (es. 'Electronics > Video > Televisions')",
-  "product_type": "Tassonomia merchant 2-3 livelli (es. 'TV > Smart OLED > 55\"')",
-
-  "_comment_C": "===== IDENTITÀ =====",
-  "brand": "Brand produttore",
-  "gtin": "EAN-13 / UPC-12 / GTIN-14 solo cifre (vuoto se assente)",
-  "mpn": "Manufacturer Part Number (codice modello produttore)",
-  "identifier_exists": "yes|no (no solo per prodotti custom/vintage/no-brand senza gtin+mpn)",
-  "item_group_id": "ID gruppo varianti dello stesso modello (es. sku base senza taglia/colore)",
-
-  "_comment_D": "===== ATTRIBUTI APPAREL & UNIVERSALI =====",
-  "gender": "male|female|unisex|''",
-  "age_group": "newborn|infant|toddler|kids|adult|''",
-  "adult": "yes|no (yes SOLO per prodotti vietati ai minori)",
-  "color": "Colore/i principali (max 3, separati da '/')",
-  "size": "Taglia/numero/misura",
-  "size_system": "EU|US|UK|IT|JP|CN|FR|DE|MEX|AU|BR|''",
-  "size_type": "regular|petite|plus|maternity|big and tall|''",
-  "material": "Materiale principale + percentuali (es. '95% cotone, 5% elastan')",
-  "pattern": "Fantasia (tinta unita, righe, quadri, floreale, animalier)",
-
-  "_comment_E": "===== CONDIZIONE & DISPONIBILITÀ =====",
-  "condition": "new|refurbished|used",
-  "availability": "in_stock|out_of_stock|preorder|backorder",
-  "availability_date": "YYYY-MM-DD se preorder/backorder, altrimenti ''",
-  "expiration_date": "YYYY-MM-DD per deperibili",
-
-  "_comment_F": "===== PREZZO UNITARIO =====",
-  "unit_pricing_measure": "Volume/peso prodotto (es. '50 ml', '200 g')",
-  "unit_pricing_base_measure": "Base prezzo unitario (es. '100 ml', '1 kg')",
-
-  "_comment_G": "===== BUNDLE & MULTIPACK =====",
-  "is_bundle": "yes|no|''",
-  "multipack": "Numero unità (es. '6') o '' se singolo",
-
-  "_comment_H": "===== SPEDIZIONE =====",
-  "shipping_weight": "Peso pacco (es. '2 kg', '500 g')",
-  "shipping_length": "Lunghezza pacco (es. '30 cm')",
-  "shipping_width": "Larghezza pacco",
-  "shipping_height": "Altezza pacco",
-  "shipping_label": "Etichetta logistica merchant (es. 'oversize', 'fragile', 'standard')",
-  "ships_from_country": "Paese ISO-2 (es. 'IT', 'DE')",
-  "min_handling_time": "Giorni preparazione min (es. '1')",
-  "max_handling_time": "Giorni preparazione max",
-  "transit_time_label": "Label tempi consegna",
-
-  "_comment_I": "===== ENERGY LABEL (TV/monitor/elettrodomestici EU) =====",
-  "energy_efficiency_class": "A|B|C|D|E|F|G o '' se non applicabile",
-  "min_energy_efficiency_class": "Classe minima scala (es. 'G')",
-  "max_energy_efficiency_class": "Classe massima (es. 'A')",
-
-  "_comment_J": "===== CERTIFICATION (obbligatoria EU per energy label prodotti EPREL) =====",
-  "certification": [
-    {"authority": "EC", "name": "EPREL", "code": "M/2019/1783"}
-  ],
-
-  "_comment_K": "===== HIGHLIGHTS (GMC: scannable bullets) =====",
-  "product_highlight": ["6-10 bullet verificabili, max 150 char ciascuno"],
-
-  "_comment_L": "===== PRODUCT DETAIL (GMC structured: qualsiasi attributo non coperto sopra) =====",
-  "product_detail": [
-    {"section_name": "Specifiche tecniche", "attribute_name": "Processore", "attribute_value": "Intel Core i7-13700H"},
-    {"section_name": "Specifiche tecniche", "attribute_name": "RAM", "attribute_value": "16 GB DDR5"},
-    {"section_name": "Connettività", "attribute_name": "Porte", "attribute_value": "USB-C Thunderbolt 4, HDMI 2.1"},
-    {"section_name": "Nella confezione", "attribute_name": "Accessori", "attribute_value": "Cavo USB-C, documentazione"},
-    {"section_name": "Compatibilità", "attribute_name": "Veicoli", "attribute_value": "Volkswagen Golf VII 2012-2020"},
-    {"section_name": "Composizione", "attribute_name": "Principio attivo", "attribute_value": "Paracetamolo 500 mg"},
-    {"section_name": "Composizione", "attribute_name": "Ingredienti", "attribute_value": "Acqua, glicerina, acido ialuronico..."},
-    {"section_name": "Composizione", "attribute_name": "Allergeni", "attribute_value": "Contiene GLUTINE, tracce di soia"},
-    {"section_name": "Forma farmaceutica", "attribute_name": "Forma", "attribute_value": "Compresse rivestite"},
-    {"section_name": "Posologia", "attribute_name": "Adulti", "attribute_value": "1 cp ogni 6-8h, max 3/die"},
-    {"section_name": "Animale", "attribute_name": "Specie", "attribute_value": "Cane adulto piccola taglia"},
-    {"section_name": "Dimensioni", "attribute_name": "LxPxA", "attribute_value": "220 x 92 x 85 cm"},
-    {"section_name": "Origine", "attribute_name": "Paese", "attribute_value": "Made in Italy"}
-  ],
-
-  "_comment_M": "===== MEDIA =====",
-  "video_link": "URL video demo (solo se presente nel testo)",
-  "lifestyle_image_link": "URL immagine lifestyle/ambiente (solo se presente)",
-
-  "_comment_N": "===== DESTINATION & TAX =====",
-  "included_destination": ["Shopping_ads", "Free_listings", "Display_ads"],
-  "excluded_destination": [],
-  "tax_category": "Categoria fiscale se specificata (es. 'books', 'clothing')",
-
-  "_comment_O": "===== CUSTOM LABELS auto-derivate =====",
-  "custom_label_0": "stagione/collezione (FW25, SS26, evergreen)",
-  "custom_label_1": "fascia_prezzo (entry|mid|premium|luxury)",
-  "custom_label_2": "uso/occasione (daily, formale, sport, regalo)",
-  "custom_label_3": "",
-  "custom_label_4": "",
-
-  "_comment_P": "===== META CATALOG (nomi UFFICIALI Facebook/Instagram) =====",
-  "title_meta": "Titolo Meta max 200 char, più descrittivo del title GMC (diventerà 'title' nel feed Meta)",
-  "short_description": "Short description Meta max 200 char (campo ufficiale Meta separato da description)",
-  "rich_text_description": "Versione HTML della description (tag permessi: <b> <i> <u> <br> <ul> <li>). Vuoto se non desumibile.",
-  "fb_product_category": "Categoria Facebook (usa Google Taxonomy se non specifica, Meta accetta lo stesso path)",
-  "origin_country": "Paese origine ISO-2 (es. 'IT', 'DE', 'CN'). Equivalente Meta di GMC ships_from_country.",
-  "manufacturer_info": "Ragione sociale + indirizzo produttore (richiesto EU GPSR reg. 2023/988).",
-  "importer_name": "Nome importatore UE (obbligo EU GPSR per prodotti extra-EU).",
-  "importer_address": "Indirizzo importatore UE.",
-  "commerce_tax_category": "Categoria fiscale Meta Commerce (es. 'STANDARD', 'FOOD', 'BOOKS').",
-  "custom_number_0": "Custom label numerico 0 (Meta accetta numeri puri per scoring/ranking)",
-  "custom_number_1": "",
-  "custom_number_2": "",
-  "custom_number_3": "",
-  "custom_number_4": "",
-  "status": "active|archived|staging (default active)",
-  "video": [
-    {"tag": "demo", "url": "https://..."},
-    {"tag": "unboxing", "url": "https://..."}
-  ],
-
-  "_comment_Q": "===== NOTE ===== Le regole GMC si applicano anche al feed Meta. Meta è più tollerante sui title (200 char) e description (9999 char)."
-}
-
-REGOLE ASSOLUTE:
-1. **NOMI UFFICIALI GMC**: usa ESATTAMENTE i nomi sopra. Sono i nomi-colonna del feed supplementare.
-   Attributi non-standard (ingredienti, allergeni, principio_attivo, compatibilità, posologia, origine
-   Made in XXX, dimensioni prodotto, etc.) vanno DENTRO `product_detail` come oggetti strutturati
-   `{section_name, attribute_name, attribute_value}` — MAI come chiavi top-level inventate.
-2. **NON INVENTARE**: se non desumibile, stringa vuota o array vuoto. MAI allucinare GTIN, prezzi,
-   codici modello, certificazioni, paesi origine, compatibilità veicoli.
-3. **identifier_exists=no** solo se mancano sia gtin che mpn per un prodotto custom/vintage/no-brand.
-4. **product_highlight**: 6-10 bullet verificabili, max 150 char, ogni bullet = spec/feature misurabile.
-5. **product_detail**: 8-20 oggetti strutturati. Usa section_name standardizzati:
-   "Specifiche tecniche", "Connettività", "Nella confezione", "Compatibilità", "Composizione",
-   "Forma farmaceutica", "Posologia", "Animale", "Dimensioni", "Origine", "Valori nutrizionali",
-   "Alimentazione", "Installazione".
-6. **certification**: array di oggetti `{authority, name, code}`. Authority = ente (CE, EC, FSC, OEKO-TEX,
-   Bio IT-BIO-XXX, DOP, IGP). Esempio per TV: `[{"authority":"EC","name":"EPREL","code":"M/2021/123456"}]`.
-   Nessuna certificazione inventata — solo se letteralmente documentata nel testo.
-7. **description**: NO parole vietate (acquista, compra, offerta, sconto, migliore, gratis, imperdibile, emoji).
-8. **title, title_meta** iniziano col brand.
-9. **Rispondi SOLO con JSON valido, senza markdown, senza ``` di apertura/chiusura**.
-10. Chiavi `_comment_*` omesse dalla risposta.
+Regole:
+1. Usa ESATTI nomi GMC sopra (colonne feed supplementare). Info non-coperte da campi top-level → dentro product_detail.
+2. Non inventare gtin, mpn, certificazioni, origine, compatibilità. Solo quando letteralmente desumibile.
+3. title/title_meta iniziano col brand.
+4. description: NO acquista|compra|offerta|sconto|migliore|gratis|imperdibile|emoji.
+5. Output: SOLO JSON valido, senza markdown. Ometti chiavi con valori vuoti per risparmiare token.
 """
 
 

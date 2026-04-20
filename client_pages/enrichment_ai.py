@@ -6,7 +6,7 @@ from anthropic import Anthropic
 from utils.state import init_state
 from utils.ui import (
     apply_theme, api_key_banner, empty_state, guarded,
-    cost_estimate_card, diff_view, LoadingProgress,
+    cost_estimate_card, cost_projection_table, diff_view, LoadingProgress,
 )
 from utils.enrichment import (
     enrich_dataframe, refine_product, chat_about_data, DEFAULT_MODEL,
@@ -51,7 +51,34 @@ df = st.session_state["feed_df"]
 # CONFIG ENRICHMENT
 # ============================================================
 c1, c2, c3, c4 = st.columns(4)
-model = c1.selectbox("Modello", ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"], index=0)
+_ALL_MODELS = [
+    # Anthropic Claude
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5-20251001",
+    "claude-haiku-3-5",
+    # OpenAI GPT-5
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    # OpenAI GPT-4.1
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    # OpenAI GPT-4o
+    "gpt-4o",
+    "gpt-4o-mini",
+    # OpenAI reasoning
+    "o3",
+    "o3-mini",
+    "o4-mini",
+]
+model = c1.selectbox(
+    "Modello", _ALL_MODELS,
+    index=_ALL_MODELS.index("claude-sonnet-4-6"),
+    help="Sweet spot qualità/costo: claude-sonnet-4-6 o gpt-4.1-mini. "
+         "Per risparmiare al massimo: claude-haiku-4-5, gpt-4.1-nano, gpt-5-nano.",
+)
 
 sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
 default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
@@ -158,6 +185,17 @@ st.markdown(
 
 # Cost estimate — based only on miss (cache skips AI call)
 cost_estimate_card(n_miss, model)
+
+with st.expander(f"💰 Confronta tutti i modelli su {n_miss:,} prodotti", expanded=False):
+    cost_projection_table(n_miss)
+    st.markdown(
+        "**Strategie per risparmiare ancora:**\n"
+        "- **Cache hash prodotto** (già attivo): re-enrichment dopo update feed = 70-95% dei prodotti in cache\n"
+        "- **Delta sync** (pagina Clienti): enrichment SOLO sui prodotti nuovi/modificati nel feed\n"
+        "- **Batch API 24h**: sconto 50% su input+output, ideale per cron notturno cataloghi grandi\n"
+        "- **Modello ibrido**: Haiku/gpt-4o-mini per bulk + Sonnet/gpt-5 solo per prodotti flaggati a bassa qualità\n"
+        "- **Limite prodotti**: testa prima con limit=10-50 per validare settore e prompt template"
+    )
 
 bcol1, bcol2 = st.columns([2, 1])
 launch = bcol1.button("Avvia enrichment", type="primary", use_container_width=True)

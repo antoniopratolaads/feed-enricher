@@ -850,25 +850,47 @@ def guarded(block_name: str = "questa operazione"):
 # ============================================================
 # COST ESTIMATOR
 # ============================================================
-# Prezzi pubblici Claude + OpenAI (USD per 1M token · aggiornare periodicamente)
+# Prezzi pubblici Claude + OpenAI (USD per 1M token · Apr 2026)
+# Chiavi: nome modello. Valori: input / output / tier qualità 1-5
 _PRICES = {
-    # Anthropic Claude (Oct 2025 tiers)
-    "claude-sonnet-4-6":   {"input": 3.00, "output": 15.00},
-    "claude-haiku-4-5":    {"input": 1.00, "output": 5.00},
-    "claude-opus-4-6":     {"input": 15.00, "output": 75.00},
-    # OpenAI
-    "gpt-4o-mini":         {"input": 0.15, "output": 0.60},
-    "gpt-4o":              {"input": 2.50, "output": 10.00},
-    "gpt-4-turbo":         {"input": 10.00, "output": 30.00},
-    "gpt-3.5-turbo":       {"input": 0.50, "output": 1.50},
+    # ===== Anthropic Claude =====
+    "claude-opus-4-6":           {"input": 15.00, "output": 75.00, "tier": 5, "family": "claude"},
+    "claude-sonnet-4-6":         {"input": 3.00,  "output": 15.00, "tier": 4, "family": "claude"},
+    "claude-haiku-4-5":          {"input": 1.00,  "output": 5.00,  "tier": 3, "family": "claude"},
+    "claude-haiku-4-5-20251001": {"input": 1.00,  "output": 5.00,  "tier": 3, "family": "claude"},
+    "claude-haiku-3-5":          {"input": 0.80,  "output": 4.00,  "tier": 2, "family": "claude"},
+
+    # ===== OpenAI GPT-5 family =====
+    "gpt-5":                     {"input": 1.25,  "output": 10.00, "tier": 5, "family": "openai"},
+    "gpt-5-mini":                {"input": 0.25,  "output": 2.00,  "tier": 4, "family": "openai"},
+    "gpt-5-nano":                {"input": 0.05,  "output": 0.40,  "tier": 2, "family": "openai"},
+
+    # ===== OpenAI GPT-4.1 family =====
+    "gpt-4.1":                   {"input": 2.00,  "output": 8.00,  "tier": 4, "family": "openai"},
+    "gpt-4.1-mini":              {"input": 0.40,  "output": 1.60,  "tier": 3, "family": "openai"},
+    "gpt-4.1-nano":              {"input": 0.10,  "output": 0.40,  "tier": 2, "family": "openai"},
+
+    # ===== OpenAI GPT-4o family =====
+    "gpt-4o":                    {"input": 2.50,  "output": 10.00, "tier": 4, "family": "openai"},
+    "gpt-4o-mini":               {"input": 0.15,  "output": 0.60,  "tier": 3, "family": "openai"},
+
+    # ===== OpenAI o-series reasoning =====
+    "o3":                        {"input": 2.00,  "output": 8.00,  "tier": 5, "family": "openai"},
+    "o3-mini":                   {"input": 0.50,  "output": 2.00,  "tier": 4, "family": "openai"},
+    "o4-mini":                   {"input": 1.10,  "output": 4.40,  "tier": 4, "family": "openai"},
+
+    # ===== Legacy =====
+    "gpt-4-turbo":               {"input": 10.00, "output": 30.00, "tier": 4, "family": "openai"},
+    "gpt-3.5-turbo":             {"input": 0.50,  "output": 1.50,  "tier": 2, "family": "openai"},
 }
 
 
 def estimate_cost(n_rows: int, model: str,
-                  tokens_in_per_row: int = 350,
-                  tokens_out_per_row: int = 1800,
-                  system_prompt_tokens: int = 5200,
-                  use_cache: bool = True) -> dict:
+                  tokens_in_per_row: int = 300,
+                  tokens_out_per_row: int = 1400,
+                  system_prompt_tokens: int = 1000,
+                  use_cache: bool = True,
+                  use_batch: bool = False) -> dict:
     """Cost estimate for enrichment of N rows with given model.
 
     Defaults aggiornati al schema GMC+Meta esteso (80+ attributi, product_detail
@@ -913,6 +935,12 @@ def estimate_cost(n_rows: int, model: str,
         total_in_equivalent = total_in_tokens
 
     total_usd = usd_in + usd_out
+
+    # Batch API: Anthropic Message Batches + OpenAI Batch API = 50% sconto su tutto
+    # Trade-off: response time fino a 24h (sync per cron notturno)
+    if use_batch:
+        total_usd *= 0.50
+
     eur = total_usd * 0.93  # EUR/USD 2026
 
     return {
@@ -925,17 +953,20 @@ def estimate_cost(n_rows: int, model: str,
         "tokens_per_row_out": tokens_out_per_row,
         "tokens_per_row_in": tokens_in_per_row,
         "use_cache": use_cache,
+        "use_batch": use_batch,
     }
 
 
 def cost_estimate_card(n_rows: int, model: str):
-    """Display a compact cost estimate card before launching enrichment."""
+    """Display cost estimate card + full model projection for the current batch."""
     if n_rows <= 0:
         return
     est_cached = estimate_cost(n_rows, model, use_cache=True)
     est_nocache = estimate_cost(n_rows, model, use_cache=False)
-    savings_eur = est_nocache["total_eur"] - est_cached["total_eur"]
-    savings_pct = int(savings_eur / est_nocache["total_eur"] * 100) if est_nocache["total_eur"] else 0
+    est_batch = estimate_cost(n_rows, model, use_cache=True, use_batch=True)
+    savings_cache = est_nocache["total_eur"] - est_cached["total_eur"]
+    savings_cache_pct = int(savings_cache / est_nocache["total_eur"] * 100) if est_nocache["total_eur"] else 0
+    savings_batch = est_cached["total_eur"] - est_batch["total_eur"]
 
     tone_color = (
         "#10B981" if est_cached["total_eur"] < 5
@@ -956,19 +987,66 @@ def cost_estimate_card(n_rows: int, model: str):
                         ~ €{est_cached['total_eur']:.2f}
                     </div>
                     <div style='font-size:0.72rem; color:#10B981; margin-top:4px; font-weight:600;'>
-                        prompt caching attivo · risparmi €{savings_eur:.2f} ({savings_pct}%)
+                        prompt caching attivo · risparmi €{savings_cache:.2f} ({savings_cache_pct}%)
+                    </div>
+                    <div style='font-size:0.7rem; color:#2F6FED; margin-top:2px;'>
+                        Batch API 24h → €{est_batch['total_eur']:.2f} (−€{savings_batch:.2f}, 50% sconto)
                     </div>
                 </div>
                 <div style='font-size:0.76rem; color:#4B5563; line-height:1.65; text-align:right;'>
                     <b>{n_rows:,}</b> prodotti<br>
-                    <b>~{est_cached['tokens_per_row_in']}</b> tok input/riga<br>
-                    <b>~{est_cached['tokens_per_row_out']}</b> tok output/riga<br>
+                    ~{est_cached['tokens_per_row_in']} tok in/riga<br>
+                    ~{est_cached['tokens_per_row_out']} tok out/riga<br>
                     ${est_cached['total_usd']:.2f} USD totali
                 </div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
+    )
+
+
+def cost_projection_table(n_rows: int):
+    """Compare TUTTI i modelli disponibili per il batch corrente."""
+    if n_rows <= 0:
+        return
+    rows = []
+    # Ordina per prezzo crescente
+    for name, meta in sorted(_PRICES.items(), key=lambda kv: kv[1]["input"] + kv[1]["output"]):
+        est = estimate_cost(n_rows, name, use_cache=True)
+        est_batch = estimate_cost(n_rows, name, use_cache=True, use_batch=True)
+        tier_stars = "⭐" * meta["tier"]
+        rows.append({
+            "modello": name,
+            "famiglia": meta["family"],
+            "qualità": tier_stars,
+            "€ con caching": round(est["total_eur"], 2),
+            "€ caching + batch": round(est_batch["total_eur"], 2),
+            "$/M input": meta["input"],
+            "$/M output": meta["output"],
+        })
+    import pandas as _pd
+    df = _pd.DataFrame(rows)
+    st.markdown(f"**Proiezione costo su {n_rows:,} prodotti · tutti i modelli**")
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=min(70 + len(df) * 34, 560),
+        column_config={
+            "modello":            st.column_config.TextColumn("Modello", width="medium"),
+            "famiglia":           st.column_config.TextColumn("Famiglia", width="small"),
+            "qualità":            st.column_config.TextColumn("Qualità", width="small"),
+            "€ con caching":      st.column_config.NumberColumn("€ con caching", format="€%.2f"),
+            "€ caching + batch":  st.column_config.NumberColumn("€ caching+batch", format="€%.2f"),
+            "$/M input":          st.column_config.NumberColumn("$/M in", format="$%.2f"),
+            "$/M output":         st.column_config.NumberColumn("$/M out", format="$%.2f"),
+        },
+        hide_index=True,
+    )
+    st.caption(
+        "**Caching** = prompt caching Anthropic/OpenAI (system prompt scritto 1 volta, letto a 10% del prezzo). "
+        "**Batch API** = invio async, risultati entro 24h, sconto 50% su tutto. "
+        "Ideale per re-enrichment notturno cron di cataloghi interi."
     )
 
 
