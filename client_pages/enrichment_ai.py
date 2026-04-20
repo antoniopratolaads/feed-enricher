@@ -447,29 +447,54 @@ from utils.catalog_optimizer import GOOGLE_FIELDS, META_FIELDS
 
 tabs = st.tabs(["🛒 Variante Google", "📘 Variante Meta", "🏷️ Tutti gli attributi"])
 
-# Lista completa campi GMC ufficiali (ordine spec)
-_google_order = ["id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"]
+# Badge visivo per enrichment status — prima colonna nelle tab
+def _status_badge(s: str) -> str:
+    s = str(s).strip().lower()
+    if s == "ok":
+        return "🟢 OK"
+    if s == "cached":
+        return "🔵 Cache"
+    if s == "reverted":
+        return "↶ Undo"
+    if s.startswith("error"):
+        return "🔴 Errore"
+    if s.startswith("empty"):
+        return "🟡 Vuoto"
+    return "⚪ —"
+
+if "_enrichment_status" in enriched.columns:
+    enriched = enriched.copy()
+    enriched["✨ Stato"] = enriched["_enrichment_status"].apply(_status_badge)
+
+# Lista completa campi GMC ufficiali (ordine spec) — badge come prima colonna
+_google_order = ["✨ Stato", "id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"]
 google_cols = [c for c in _google_order if c in enriched.columns]
 # Solo campi popolati per non mostrare colonne tutte vuote
 google_cols = [c for c in google_cols
-               if c == "id" or enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+               if c in ("✨ Stato", "id") or
+               enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
 
-# Lista completa campi Meta ufficiali
-_meta_order = ["id"] + [t for t, _, _ in META_FIELDS if t != "id"]
+# Lista completa campi Meta ufficiali — badge come prima colonna
+_meta_order = ["✨ Stato", "id"] + [t for t, _, _ in META_FIELDS if t != "id"]
 meta_cols = [c for c in _meta_order if c in enriched.columns]
 meta_cols = [c for c in meta_cols
-             if c == "id" or enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+             if c in ("✨ Stato", "id") or
+             enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
 
 # Tutti gli attributi (compresi Meta extras + meta-internal)
-_all_order = ["id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"] + \
+_all_order = ["✨ Stato", "id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"] + \
              [t for t, _, _ in META_FIELDS if t not in {x for x, _, _, _ in GOOGLE_FIELDS}]
 other_cols = [c for c in enriched.columns if c not in _all_order]
 all_cols = [c for c in _all_order if c in enriched.columns] + other_cols
 all_cols = [c for c in all_cols
-            if c == "id" or enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+            if c in ("✨ Stato", "id") or
+            enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
 
 # Column config sharing
 _col_cfg = {
+    "✨ Stato":               st.column_config.TextColumn("Enrichment", width="small",
+                                help="🟢 OK = processato ora · 🔵 Cache = da cache · "
+                                     "↶ Undo = ripristinato · 🔴 Errore · 🟡 Vuoto · ⚪ non arricchito"),
     "title":                  st.column_config.TextColumn(width="large"),
     "description":            st.column_config.TextColumn(width="large"),
     "title_meta":             st.column_config.TextColumn("title_meta (Meta)", width="large"),
