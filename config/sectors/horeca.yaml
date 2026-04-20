@@ -1,0 +1,317 @@
+# Best practice HO.RE.CA. (Hotel / Restaurant / Catering)
+# Distribuzione professionale per ristorazione, alberghiero, catering, bar,
+# pizzerie, pasticcerie. Include: attrezzature cucina professionale (forni,
+# friggitrici, abbattitori), refrigerazione commerciale (frigo banco, armadi,
+# tavoli refrigerati), preparazione (planetarie, affettatrici, tritacarne),
+# lavaggio (lavastoviglie a capote, lavabicchieri), mise en place, stoviglie
+# ristorazione, posateria, bicchieri, carrelli, attrezzatura bar, macchine
+# caffè espresso pro, abbigliamento sala/cucina, consumabili HACCP,
+# detergenti professionali, arredamento contract.
+#
+# Fonti: CE Machinery Directive 2006/42/EC, EU Hygiene Regulation 852/2004,
+# HACCP reg 852/2004, EN 1672 (macchine food), NSF (USA), Gastronorm EN 631
+# (standard contenitori 1/1 GN, 1/2 GN, 1/3 GN, 2/1 GN).
+
+sector: horeca
+display_name: HO.RE.CA. / Ristorazione professionale
+version: 1.0
+
+# ============================================================
+# TITOLI
+# ============================================================
+title:
+  formula: "{brand} {modello} {tipo_prodotto} {capacita_dimensioni} {potenza_tensione} {materiale}"
+  formula_examples:
+    - "Electrolux Professional 260000 Forno combinato SkyLine 20 teglie GN 1/1 21kW 400V inox"
+    - "Fimar PPF/50 Pizza forno elettrico 2 camere 70x70 pietra refrattaria 9kW inox"
+    - "Friulinox ABF061 Abbattitore 6 teglie GN 1/1 capacità 30 kg/ciclo inox AISI 304"
+    - "Bonnet PM80 Friggitrice professionale 8+8 litri doppia vasca 18kW 400V trifase"
+    - "Ambach TDC250 Tavolo refrigerato 3 porte 380L acciaio inox classe climatica 4"
+    - "Rational iCombi Pro 10-1/1 forno combinato 10 teglie 19kW 400V HACCP"
+    - "Arcoroc bicchiere da birra Stella 40cl calice cristallo rinforzato (confezione 24pz)"
+    - "Ferraboli F115 planetaria professionale 10 litri 500W 3 velocità trasmissione cinghia"
+  rules:
+    - "Brand + modello/codice SEMPRE (attrezzatura pro = codice modello critico per ricerca e ricambi)"
+    - "Capacità/dimensioni in primo piano: numero teglie GN, litri, kg/ciclo, n. coperti/ora, n. posti"
+    - "Tensione + potenza: 230V monofase / 400V trifase + kW. Fondamentale per installazione"
+    - "Materiale: acciaio inox AISI 304/316, rame, ottone, polipropilene food-grade"
+    - "Formato standard: Gastronorm GN 1/1, GN 1/2, GN 1/3, GN 2/1 (EN 631) quando applicabile"
+    - "Per consumabili pack/cartoni: indica SEMPRE quantità per confezione (es. 'conf. 24 pz', 'scatola 1000 pz')"
+    - "Tra 80 e 150 char (Google), max 200 Meta"
+    - "NO 'casalingo', 'domestico' — è attrezzatura PRO"
+  forbidden_words:
+    - "acquista"
+    - "offerta"
+    - "sconto"
+    - "casalingo"
+    - "domestico"
+    - "hobby"
+    - "migliore"
+    - "top"
+    - "esclusivo"
+
+# ============================================================
+# DESCRIZIONI
+# ============================================================
+description:
+  structure:
+    - "Frase 1: cosa è + contesto d'uso (pizzeria, ristorante, bar, catering, pasticceria, mensa)"
+    - "Blocco costruzione (materiale corpo, finitura, struttura monoscocca/smontabile)"
+    - "Blocco capacità + produzione oraria (teglie, coperti/ora, litri/ora, kg/ciclo)"
+    - "Blocco allacciamento (tensione, potenza kW, scarico acqua, carico, fumi)"
+    - "Blocco controlli (elettromeccanico / digitale / touchscreen / programmi memorizzabili)"
+    - "Blocco pulizia e igiene (smontaggio senza attrezzi, lavabile in lavastoviglie, HACCP)"
+    - "Blocco dimensioni + peso + scarico"
+    - "Blocco certificazioni (CE, HACCP, NSF, GAS conforme EN 203, EN 60335-2 per elettrici)"
+    - "Installazione (sotto cappa, a pavimento, a parete, fissaggio)"
+  length:
+    min_chars: 300
+    ideal_chars: 800
+    max_chars: 5000
+  tone:
+    - "Tecnico-professionale: 'camera 70x70cm in acciaio inox AISI 304 con suolo in pietra refrattaria 15mm' non 'cottura perfetta'"
+    - "Numeri: watt, kW, volt, Hz, bar, litri, kg, m³/h, dB, gradi °C min-max, kg/ciclo, n. coperti"
+    - "Cita standard: Gastronorm GN, EN 631, HACCP, classe climatica (1-5), IP protezione"
+    - "Indica MADE IN: Italia spesso valore aggiunto (Italy-based brand come Fimar, Everlasting, Fagor)"
+    - "NO marketing da retail: 'elegante', 'perfetto', 'ideale per', 'amerai'"
+  must_include:
+    - "Capacità / produzione oraria"
+    - "Tensione + potenza (kW o kcal/h per gas)"
+    - "Dimensioni esterne LxPxA + peso"
+    - "Materiale corpo (AISI 304/316 per contatto alimenti)"
+    - "Certificazioni CE + EN specifiche"
+    - "Scarico acqua (mm) se applicabile"
+    - "Classe climatica (frigorifero)"
+    - "Formato standard Gastronorm o misure teglie"
+
+# ============================================================
+# ATTRIBUTI SPECIFICI HO.RE.CA.
+# ============================================================
+required_attributes:
+  - name: product_type
+    common_values:
+      - forno combinato / convezione / pizza / rotante
+      - friggitrice (a gas / elettrica / a pressione)
+      - abbattitore / armadio temperatura
+      - frigorifero banco / armadio / tavolo
+      - vetrina refrigerata / calda / gastronomia
+      - piano cottura / cucina a gas / induzione professionale
+      - lavastoviglie capote / a nastro / lavabicchieri
+      - cappa aspirante professionale
+      - planetaria / impastatrice / tritacarne / affettatrice
+      - macchina caffè espresso professionale 1/2/3 gruppi
+      - macinadosatore / pressino caffè
+      - spremiagrumi / frullatore / robot cucina
+      - gelatiera / mantecatore / pastorizzatore
+      - sottovuoto / packaging
+      - piastre cottura (fry-top, griglie, bistecchiere)
+      - bagnomaria / scaldavivande
+      - toaster / salamandra / bollitore
+      - brick / armadio asciugatura
+      - stoviglie (piatti, tazzine, calici, posate) per ristorazione
+      - mise en place (tovaglie, tovaglioli, runner)
+      - consumabili (carta, buste alluminio, vaschette GN, film)
+      - detergenti alimentari HACCP
+      - abbigliamento (divisa cuoco, grembiuli, pantaloni, calzature antiscivolo)
+      - carrelli (porta-teglie, di servizio, self-service)
+      - arredamento contract (tavoli, sedie, sgabelli bar)
+
+  - name: hospitality_segment
+    values:
+      - ristorante
+      - pizzeria
+      - bar / caffetteria
+      - pasticceria / panificio
+      - gelateria
+      - hotel / alberghiero
+      - mensa / collettività
+      - catering / banqueting
+      - pub / birreria
+      - rosticceria / gastronomia
+      - self-service / fast food
+
+  - name: capacity
+    examples:
+      - "10 teglie GN 1/1"
+      - "20 pizze/ora"
+      - "60 coperti/servizio"
+      - "80 litri"
+      - "30 kg/ciclo abbattimento"
+      - "450 piatti/ora"
+      - "100 tazzine/ora"
+
+  - name: power_watt
+    note: "Potenza in watt o kW"
+    examples: ["9 kW", "18 kW", "21 kW", "3500 W"]
+
+  - name: voltage
+    values:
+      - "230V monofase 50Hz"
+      - "400V trifase 50Hz + N"
+      - "230V / 400V commutabile"
+      - "batteria 12V / 24V (per piccola attrezzatura mobile)"
+
+  - name: gas_consumption
+    note: "Per attrezzature a gas (kW termici o kcal/h + tipo gas)"
+    examples: ["13 kW gas metano / GPL", "11.200 kcal/h"]
+
+  - name: material
+    common_values:
+      - acciaio inox AISI 304 (contatto alimenti, food-grade)
+      - acciaio inox AISI 316 (ambienti salini, elevata resistenza)
+      - acciaio inox AISI 430 (esterni non a contatto)
+      - ghisa smaltata (griglie, piastre)
+      - pietra refrattaria (suolo forni pizza)
+      - rame / ottone (scaldavivande, utensili)
+      - vetro temperato
+      - policarbonato food-grade (vaschette GN, contenitori)
+      - polipropilene (carrelli, vassoi)
+
+  - name: climate_class
+    note: "Classe climatica frigoriferi (EN ISO 22041)"
+    values: [1, 2, 3, 4, 5]
+    description: "4 = +30°C 55% UR (standard IT), 5 = +40°C 40% UR (zone calde)"
+
+  - name: ip_rating
+    note: "Grado protezione IP (es. IPX4 per attrezzature lavaggio)"
+    common_values: [IP20, IP21, IPX4, IPX5, IPX6]
+
+  - name: gastronorm_format
+    note: "Standard EN 631 — misure teglie/contenitori"
+    values:
+      - "GN 2/1 (650x530mm)"
+      - "GN 1/1 (530x325mm)"
+      - "GN 1/2 (325x265mm)"
+      - "GN 1/3 (325x176mm)"
+      - "GN 1/4 (265x162mm)"
+      - "GN 1/6 (176x162mm)"
+      - "GN 1/9 (176x108mm)"
+
+  - name: certifications
+    required_for_eu:
+      - "CE (Direttiva Macchine 2006/42/CE)"
+      - "EN 60335-2-X (sicurezza elettrodomestici professionali)"
+      - "EN 203 (apparecchi gas ristorazione)"
+      - "EN 631 (Gastronorm)"
+      - "Reg. EU 852/2004 HACCP (materiali contatto alimenti)"
+      - "Reg. EU 1935/2004 (materiali destinati al contatto con alimenti)"
+    optional:
+      - "NSF (validità mercato USA)"
+      - "ETL Sanitation"
+      - "Energy Star Commercial"
+      - "ISO 22000 (produttore)"
+
+  - name: noise_level
+    format: "dB(A)"
+    note: "Critico per frigoriferi bar (location sensibili al rumore)"
+
+  - name: min_temperature / max_temperature
+    examples:
+      - "+2°C / +10°C (frigorifero banco)"
+      - "-22°C / -18°C (abbattitore/armadio freezer)"
+      - "+10°C / +90°C (bagnomaria)"
+      - "50°C / 320°C (forno)"
+
+  - name: product_highlight
+    examples:
+      - "Forno combinato 10 teglie GN 1/1 (530x325mm), potenza 19 kW 400V trifase"
+      - "Camera in acciaio inox AISI 304, suolo in pietra refrattaria 15mm per pizza"
+      - "Classe climatica 4 (+30°C 55% UR), conforme HACCP reg. 852/2004"
+      - "Controllo elettronico touchscreen 7\" con 150 programmi memorizzabili"
+      - "Smontaggio guide e ventola senza attrezzi per sanificazione HACCP"
+      - "Scarico acqua posteriore Ø40mm, installazione su pavimento"
+      - "Dimensioni LxPxA 890x848x790mm, peso 145 kg"
+      - "Certificazione CE + Direttiva Macchine 2006/42/CE + EN 60335-2-42"
+
+# ============================================================
+# CATEGORIA GOOGLE TAXONOMY
+# ============================================================
+google_taxonomy:
+  root: "Business & Industrial > Food Service"
+  common_paths:
+    - "Business & Industrial > Food Service > Commercial Food Preparation > Commercial Ranges"
+    - "Business & Industrial > Food Service > Commercial Food Preparation > Commercial Ovens"
+    - "Business & Industrial > Food Service > Commercial Food Preparation > Commercial Deep Fryers"
+    - "Business & Industrial > Food Service > Commercial Food Preparation > Commercial Griddles"
+    - "Business & Industrial > Food Service > Commercial Food Preparation > Commercial Mixers"
+    - "Business & Industrial > Food Service > Commercial Food Preparation > Food Slicers"
+    - "Business & Industrial > Food Service > Commercial Food Preparation > Commercial Food Preparation Tables"
+    - "Business & Industrial > Food Service > Commercial Food Service Carts"
+    - "Business & Industrial > Food Service > Commercial Kitchen Ventilation"
+    - "Business & Industrial > Food Service > Commercial Dishwashing > Commercial Dishwashers"
+    - "Business & Industrial > Food Service > Commercial Refrigeration > Commercial Refrigerators"
+    - "Business & Industrial > Food Service > Commercial Refrigeration > Commercial Freezers"
+    - "Business & Industrial > Food Service > Commercial Refrigeration > Commercial Blast Chillers"
+    - "Business & Industrial > Food Service > Commercial Beverage Equipment > Commercial Espresso Machines"
+    - "Business & Industrial > Food Service > Commercial Beverage Equipment > Commercial Beer Dispensers"
+    - "Business & Industrial > Food Service > Food Service Disposables"
+    - "Business & Industrial > Food Service > Food Storage > Commercial Food Storage Containers"
+    - "Business & Industrial > Food Service > Restaurant & Catering Supplies"
+    - "Home & Garden > Kitchen & Dining > Tableware > Dinnerware"
+    - "Home & Garden > Kitchen & Dining > Tableware > Drinkware"
+    - "Home & Garden > Kitchen & Dining > Tableware > Flatware"
+
+# ============================================================
+# IMMAGINI
+# ============================================================
+images:
+  - "Main image: prodotto intero su sfondo bianco/neutro, vista 3/4 o frontale"
+  - "Min 500x500 (obbligatorio GMC dal 30 giugno 2026), ideale 2000x2000"
+  - "additional_image_link: retro (attacchi/scarichi), interno camera, dettaglio controlli, targa dati tecnici"
+  - "Per consumabili/stoviglie: pack shot + prodotto singolo + in uso in contesto ristorazione"
+
+# ============================================================
+# IDENTIFICATORI
+# ============================================================
+identifiers:
+  gtin:
+    required_if_brand: true
+    note: "Attrezzature HO.RE.CA branded hanno tipicamente EAN. Consumabili sempre."
+  mpn:
+    required: true
+    note: "Codice articolo produttore CRITICO per ricerca ricambi e assistenza"
+  item_group_id:
+    note: "Raggruppa varianti potenza / capacità / tensione dello stesso modello base"
+
+# ============================================================
+# CUSTOM LABELS SUGGERITE
+# ============================================================
+custom_labels_suggested:
+  custom_label_0: "categoria (cottura / refrigerazione / preparazione / lavaggio / bar / consumabili / stoviglie)"
+  custom_label_1: "segmento (ristorante / pizzeria / bar / pasticceria / hotel / catering)"
+  custom_label_2: "fascia_prezzo (entry / mid / premium / top)"
+  custom_label_3: "performance (bestseller / steady / slow / new)"
+  custom_label_4: "promo (full_price / clearance / contratto_b2b)"
+
+# ============================================================
+# PLATFORM DIFFERENCES
+# ============================================================
+platform_differences:
+  google:
+    title_max: 150
+    description_max: 5000
+    required: [google_product_category, condition, gtin_or_mpn]
+    note: "GMC accetta B2B con adult=no ma attenzione a categoria"
+  meta:
+    title_max: 200
+    description_max: 9999
+    note: "Meta Commerce scarsa presenza HO.RE.CA — pubblico prevalentemente B2C. Valuta se includere."
+
+# ============================================================
+# TONO DI VOCE
+# ============================================================
+ai_voice:
+  do:
+    - "Tecnico-professionale: dati misurabili (kW, V, Hz, litri, kg, °C, dB, IP, classe)"
+    - "Standard industry: Gastronorm, HACCP, AISI 304, classe climatica, CE + EN"
+    - "Cita certificazioni ufficiali con numero direttiva (CE 2006/42/CE, EN 60335-2-42)"
+    - "Materiali esatti (AISI 304 vs 316 fa differenza importante)"
+    - "Segmento d'uso specifico (pizzeria napoletana, pasticceria, gelateria artigianale)"
+    - "Installazione: sotto cappa, a pavimento, allacciamento monofase/trifase"
+  dont:
+    - "NO linguaggio retail ('perfetto', 'ideale', 'amerai', 'il migliore')"
+    - "NO claim durata senza dato ('indistruttibile', 'dura per sempre')"
+    - "NO 'professionale' ridondante (se è in questo settore è già professionale)"
+    - "NO installazione fai-da-te per attrezzature con gas (richiede tecnico abilitato UNI 11528)"
+    - "NO attrezzature dichiarate HACCP se non conformi reg 852/2004"
+    - "NO omissione tensione/potenza (dato critico per acquisto B2B)"

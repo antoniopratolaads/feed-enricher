@@ -244,6 +244,55 @@ SECTOR_RULES: dict[str, dict] = {
         "taxonomy_hints": ["radiators", "heated towel rails", "space heaters", "electric heaters"],
         "exclude": [],
     },
+    "horeca": {
+        "keywords_strong": [
+            # Attrezzature cucina professionale
+            "forno combinato", "forno convezione", "forno pizza", "forno rotante",
+            "friggitrice professionale", "friggitrice a gas", "abbattitore",
+            "abbattitore di temperatura", "cella frigorifera", "armadio frigorifero",
+            "tavolo refrigerato", "vetrina refrigerata", "vetrina gastronomia",
+            "bagnomaria professionale", "fry-top", "fry top", "bistecchiera",
+            "piastra cottura professionale", "salamandra", "cuocipasta",
+            "brasiera", "marmitta", "griglia a pietra lavica",
+            # Preparazione
+            "planetaria professionale", "impastatrice pizza", "tritacarne",
+            "affettatrice professionale", "segaossa", "pelatrice",
+            "spremiagrumi professionale", "frullatore bar", "mixer bar",
+            "gelatiera professionale", "mantecatore", "pastorizzatore",
+            # Lavaggio
+            "lavastoviglie a capote", "lavastoviglie professionale",
+            "lavabicchieri", "sottolavello professionale",
+            # Bar / caffetteria
+            "macchina caffè professionale", "macchina espresso",
+            "macinadosatore", "pressino caffè", "macinacaffè professionale",
+            "spillatore birra", "impianto spina birra", "dispenser bevande",
+            "granitore", "distributore granite",
+            # Mise en place / stoviglie ristorazione
+            "gastronorm", "teglia gn", "contenitore gn", "vaschetta gastronorm",
+            "carrello porta teglie", "carrello di servizio", "carrello self service",
+            "pass through", "banco pass",
+            # Brand HO.RE.CA.
+            "electrolux professional", "rational", "unox", "fimar",
+            "angelo po", "hobart", "friulinox", "everlasting",
+            "la marzocco", "la cimbali", "nuova simonelli", "rancilio",
+            "wega", "expobar", "faema", "san remo espresso",
+        ],
+        "keywords_weak": [
+            "inox aisi 304", "inox aisi 316", "haccp", "trifase",
+            "400v", "kw", "coperti/ora", "teglie/ora",
+            "gn 1/1", "gn 1/2", "gn 2/1", "classe climatica",
+            "ristorazione", "pizzeria", "bar",
+        ],
+        "taxonomy_hints": [
+            "business & industrial > food service",
+            "commercial food preparation",
+            "commercial refrigeration",
+            "commercial kitchen",
+            "commercial beverage equipment",
+            "commercial dishwashing",
+        ],
+        "exclude": ["elettrodomestici casalingo", "uso domestico"],
+    },
 }
 
 
