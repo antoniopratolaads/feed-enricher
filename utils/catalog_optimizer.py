@@ -260,11 +260,31 @@ def _truncate(text: str, max_len: int) -> str:
 
 
 def _coalesce(row: pd.Series, cols: list[str]) -> str:
+    """Return first non-empty value from cols. Handles list/dict/NA safely."""
     for c in cols:
-        if c in row.index:
-            v = row[c]
-            if pd.notna(v) and str(v).strip() not in ("", "nan"):
-                return str(v).strip()
+        if c not in row.index:
+            continue
+        v = row[c]
+        # Liste / array / dict: vuoti → skip, pieni → serializza JSON
+        if isinstance(v, (list, tuple)):
+            if len(v) == 0:
+                continue
+            import json as _json
+            return _json.dumps(v, ensure_ascii=False)
+        if isinstance(v, dict):
+            if not v:
+                continue
+            import json as _json
+            return _json.dumps(v, ensure_ascii=False)
+        # Scalare: check NA
+        try:
+            if pd.isna(v):
+                continue
+        except (TypeError, ValueError):
+            pass
+        s = str(v).strip()
+        if s and s.lower() not in ("nan", "none", "null"):
+            return s
     return ""
 
 
