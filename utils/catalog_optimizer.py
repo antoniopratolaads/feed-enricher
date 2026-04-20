@@ -20,44 +20,101 @@ import re
 
 # (target_col, [source_cols in priority order], required_for_gmc, required_for_meta)
 GOOGLE_FIELDS = [
-    ("id",                            ["id"],                                  True,  True),
-    ("title",                         ["title"],                               True,  True),
-    ("description",                   ["description"],                         True,  True),
-    ("link",                          ["link"],                                True,  True),
-    ("image_link",                    ["image_link"],                          True,  True),
-    ("additional_image_link",         ["additional_image_link"],               False, False),
-    ("availability",                  ["availability"],                        True,  True),
-    ("price",                         ["price"],                               True,  True),
-    ("sale_price",                    ["sale_price"],                          False, False),
-    ("brand",                         ["brand"],                               True,  True),
-    ("gtin",                          ["gtin"],                                False, False),
-    ("mpn",                           ["mpn"],                                 False, False),
-    ("identifier_exists",             [],                                      False, False),  # calcolato
-    ("condition",                     ["condition"],                           True,  True),
-    ("google_product_category",       ["google_product_category"], True, True),
-    ("product_type",                  ["product_type"],     False, False),
-    ("color",                         ["color"],                   False, False),
-    ("size",                          ["size"],                     False, False),
-    ("material",                      ["material"],             False, False),
-    ("pattern",                       ["pattern"],               False, False),
-    ("gender",                        ["gender"],                 False, False),
-    ("age_group",                     ["age_group"],           False, False),
-    ("item_group_id",                 ["item_group_id"],                       False, False),
-    ("custom_label_0",                ["custom_label_0"],                      False, False),
-    ("custom_label_1",                ["custom_label_1"],                      False, False),
-    ("custom_label_2",                ["custom_label_2"],                      False, False),
-    ("custom_label_3",                ["custom_label_3"],                      False, False),
-    ("custom_label_4",                ["custom_label_4"],                      False, False),
-    # ========== CAMPI GMC AGGIUNTIVI UFFICIALI ==========
-    ("product_highlight",             ["product_highlight"],                   False, False),
-    ("product_detail",                ["product_detail"],                      False, False),
-    ("unit_pricing_measure",          ["unit_pricing_measure"],                False, False),
-    ("unit_pricing_base_measure",     ["unit_pricing_base_measure"],           False, False),
-    ("shipping_weight",               ["shipping_weight"],                     False, False),
-    ("is_bundle",                     ["is_bundle"],                           False, False),
-    ("multipack",                     ["multipack"],                           False, False),
-    ("availability_date",             ["availability_date"],                   False, False),
-    ("expiration_date",               ["expiration_date"],                     False, False),
+    # Identificativi base (obbligatori)
+    ("id",                            ["id"],                           True,  True),
+    ("title",                         ["title"],                        True,  True),
+    ("description",                   ["description"],                  True,  True),
+    ("link",                          ["link"],                         True,  True),
+    ("mobile_link",                   ["mobile_link"],                  False, False),
+
+    # Immagini
+    ("image_link",                    ["image_link"],                   True,  True),
+    ("additional_image_link",         ["additional_image_link"],        False, False),
+    ("lifestyle_image_link",          ["lifestyle_image_link"],         False, False),
+    ("video_link",                    ["video_link"],                   False, False),
+
+    # Stato e disponibilità
+    ("availability",                  ["availability"],                 True,  True),
+    ("availability_date",             ["availability_date"],            False, False),
+    ("expiration_date",               ["expiration_date"],              False, False),
+    ("condition",                     ["condition"],                    True,  True),
+    ("adult",                         ["adult"],                        False, False),
+
+    # Prezzi
+    ("price",                         ["price"],                        True,  True),
+    ("sale_price",                    ["sale_price"],                   False, False),
+    ("sale_price_effective_date",     ["sale_price_effective_date"],    False, False),
+    ("unit_pricing_measure",          ["unit_pricing_measure"],         False, False),
+    ("unit_pricing_base_measure",     ["unit_pricing_base_measure"],    False, False),
+    ("installment",                   ["installment"],                  False, False),
+    ("subscription_cost",             ["subscription_cost"],            False, False),
+    ("loyalty_points",                ["loyalty_points"],               False, False),
+
+    # Tassonomia & identità
+    ("google_product_category",       ["google_product_category"],      True,  True),
+    ("product_type",                  ["product_type"],                 False, False),
+    ("brand",                         ["brand"],                        True,  True),
+    ("gtin",                          ["gtin"],                         False, False),
+    ("mpn",                           ["mpn"],                          False, False),
+    ("identifier_exists",             [],                               False, False),  # calcolato
+
+    # Attributi prodotto
+    ("color",                         ["color"],                        False, False),
+    ("size",                          ["size"],                         False, False),
+    ("size_type",                     ["size_type"],                    False, False),
+    ("size_system",                   ["size_system"],                  False, False),
+    ("material",                      ["material"],                     False, False),
+    ("pattern",                       ["pattern"],                      False, False),
+    ("gender",                        ["gender"],                       False, False),
+    ("age_group",                     ["age_group"],                    False, False),
+
+    # Bundle & multipack
+    ("is_bundle",                     ["is_bundle"],                    False, False),
+    ("multipack",                     ["multipack"],                    False, False),
+
+    # Varianti
+    ("item_group_id",                 ["item_group_id"],                False, False),
+
+    # Energia (EU)
+    ("energy_efficiency_class",       ["energy_efficiency_class"],      False, False),
+    ("min_energy_efficiency_class",   ["min_energy_efficiency_class"],  False, False),
+    ("max_energy_efficiency_class",   ["max_energy_efficiency_class"],  False, False),
+
+    # Certification (EU EPREL, FSC, Bio ecc.)
+    ("certification",                 ["certification"],                False, False),
+
+    # Highlights & details (structured, contengono attributi non top-level)
+    ("product_highlight",             ["product_highlight"],            False, False),
+    ("product_detail",                ["product_detail"],               False, False),
+
+    # Spedizione
+    ("shipping",                      ["shipping"],                     False, False),
+    ("shipping_label",                ["shipping_label"],               False, False),
+    ("shipping_weight",               ["shipping_weight"],              False, False),
+    ("shipping_length",               ["shipping_length"],              False, False),
+    ("shipping_width",                ["shipping_width"],               False, False),
+    ("shipping_height",               ["shipping_height"],              False, False),
+    ("ships_from_country",            ["ships_from_country"],           False, False),
+    ("min_handling_time",             ["min_handling_time"],            False, False),
+    ("max_handling_time",             ["max_handling_time"],            False, False),
+    ("transit_time_label",            ["transit_time_label"],           False, False),
+
+    # Tax & destinations
+    ("tax",                           ["tax"],                          False, False),
+    ("tax_category",                  ["tax_category"],                 False, False),
+    ("included_destination",          ["included_destination"],         False, False),
+    ("excluded_destination",          ["excluded_destination"],         False, False),
+    ("shopping_ads_excluded_country", ["shopping_ads_excluded_country"], False, False),
+
+    # Promozioni
+    ("promotion_id",                  ["promotion_id"],                 False, False),
+
+    # Custom labels
+    ("custom_label_0",                ["custom_label_0"],               False, False),
+    ("custom_label_1",                ["custom_label_1"],               False, False),
+    ("custom_label_2",                ["custom_label_2"],               False, False),
+    ("custom_label_3",                ["custom_label_3"],               False, False),
+    ("custom_label_4",                ["custom_label_4"],               False, False),
 ]
 
 # Meta-specific aggiuntivi (oltre a quelli sopra)

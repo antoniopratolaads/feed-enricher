@@ -65,134 +65,147 @@ def _sector_brief(sector: dict) -> str:
             parts.append("EVITA:\n- " + "\n- ".join(dont))
     return "\n".join(parts)
 
-SYSTEM_PROMPT_BASE = """Sei un esperto di e-commerce, Google Merchant Center, Meta Catalog e copywriting performance-driven.
-Ricevi un prodotto con: titolo, descrizione, eventuali metriche (clicks, conversioni, ROAS, vendite Shopify, viste).
-IL TUO COMPITO: estrarre E INFERIRE il MASSIMO NUMERO di attributi standard possibili leggendo titolo + descrizione + metadata.
-Scrivi UN SOLO JSON con TUTTI i campi qui sotto. Per ogni campo: popolalo SEMPRE se desumibile dal testo,
-altrimenti lascia stringa vuota "" o array vuoto []. NON lasciare i campi fuori dal JSON.
+SYSTEM_PROMPT_BASE = """Sei un esperto di e-commerce specializzato in feed Google Merchant Center e Meta Catalog.
+Ricevi un prodotto con titolo, descrizione, brand, eventuali metriche (clicks, conversioni, ROAS, vendite Shopify, viste).
+
+IL TUO COMPITO: estrarre / inferire il MASSIMO NUMERO di attributi usando i NOMI UFFICIALI Google.
+L'output deve essere DIRETTAMENTE utilizzabile come feed supplementare su Google Merchant Center
+(i nomi dei campi corrispondono 1:1 alla specifica ufficiale GMC 2026).
 
 USA le metriche performance per calibrare il tono:
 - zombie/no_clicks → titolo più aggressivo, attributi in evidenza, keyword search-friendly
-- bestseller → mantieni il messaggio vincente, valorizza prove sociali implicite
+- bestseller → mantieni il messaggio vincente
 - alte viste e poche conversioni → descrizione punta su benefici e differenziatori
 
-RESTITUISCI UN SINGOLO JSON valido con TUTTI questi campi (nomi UFFICIALI Google/Meta):
+RESTITUISCI UN UNICO JSON valido con i seguenti NOMI UFFICIALI GMC (spec https://support.google.com/merchants/answer/7052112).
+Ometti le chiavi che iniziano con "_comment_" dalla risposta — servono solo a organizzare questa spec.
+Per ogni campo: popolalo se desumibile, altrimenti stringa vuota "" o array vuoto [].
+
 {
-  "_comment_testi": "TESTI PRINCIPALI",
-  "title": "Titolo Google Merchant (70-150 char). Formula: Brand + Prodotto + Attributi chiave",
-  "title_meta": "Titolo Meta Catalog (max 200 char, più descrittivo)",
-  "description": "Descrizione Google 200-5000 char, tono descrittivo, NO promozionale",
-  "description_meta_short": "Short description Meta max 200 char",
-  "rich_text_description": "HTML Meta (bold/italic/list). Vuoto se non desumibile struttura",
+  "_comment_A": "===== TESTI (GMC core) =====",
+  "title": "Titolo GMC 70-150 char · Formula: Brand + Prodotto + Attributi chiave",
+  "description": "Descrizione GMC 200-5000 char · tono descrittivo, NO promozionale",
 
-  "_comment_tassonomia": "CATEGORIZZAZIONE",
-  "google_product_category": "Percorso COMPLETO Google Taxonomy (es. 'Electronics > Video > Televisions')",
-  "product_type": "Tassonomia interna 2-3 livelli (es. 'TV > Smart TV OLED > 55 pollici')",
-  "fb_product_category": "Categoria Facebook se diversa da Google (es. 'Electronics > TVs')",
+  "_comment_B": "===== TASSONOMIA =====",
+  "google_product_category": "Path COMPLETO Google Taxonomy (es. 'Electronics > Video > Televisions')",
+  "product_type": "Tassonomia merchant 2-3 livelli (es. 'TV > Smart OLED > 55\"')",
 
-  "_comment_identita": "IDENTITÀ PRODOTTO",
-  "brand": "Brand ufficiale del produttore",
-  "gtin": "Codice EAN-13 o UPC-12 (solo cifre) SE presente",
-  "mpn": "Manufacturer Part Number / codice modello brand",
-  "identifier_exists": "yes|no (no solo se mancano gtin+mpn per prodotti no-brand/vintage/custom)",
-  "item_group_id": "ID gruppo per varianti dello stesso modello (es. sku base senza taglia/colore)",
+  "_comment_C": "===== IDENTITÀ =====",
+  "brand": "Brand produttore",
+  "gtin": "EAN-13 / UPC-12 / GTIN-14 solo cifre (vuoto se assente)",
+  "mpn": "Manufacturer Part Number (codice modello produttore)",
+  "identifier_exists": "yes|no (no solo per prodotti custom/vintage/no-brand senza gtin+mpn)",
+  "item_group_id": "ID gruppo varianti dello stesso modello (es. sku base senza taglia/colore)",
 
-  "_comment_attributi_apparel": "APPAREL & SCARPE & ACCESSORI",
+  "_comment_D": "===== ATTRIBUTI APPAREL & UNIVERSALI =====",
   "gender": "male|female|unisex|''",
   "age_group": "newborn|infant|toddler|kids|adult|''",
+  "adult": "yes|no (yes SOLO per prodotti vietati ai minori)",
   "color": "Colore/i principali (max 3, separati da '/')",
-  "size": "Taglia/numero EU/misura (es. '42', 'M', '15.6\"')",
-  "size_system": "EU|US|UK|IT|JP|CN|FR|DE|MEX|AU|''",
+  "size": "Taglia/numero/misura",
+  "size_system": "EU|US|UK|IT|JP|CN|FR|DE|MEX|AU|BR|''",
   "size_type": "regular|petite|plus|maternity|big and tall|''",
   "material": "Materiale principale + percentuali (es. '95% cotone, 5% elastan')",
-  "pattern": "Fantasia (tinta unita, righe, quadri, floreale, animalier, ...)",
+  "pattern": "Fantasia (tinta unita, righe, quadri, floreale, animalier)",
 
-  "_comment_condizioni": "CONDIZIONE & DISPONIBILITÀ",
-  "condition": "new|refurbished|used (default new)",
+  "_comment_E": "===== CONDIZIONE & DISPONIBILITÀ =====",
+  "condition": "new|refurbished|used",
   "availability": "in_stock|out_of_stock|preorder|backorder",
   "availability_date": "YYYY-MM-DD se preorder/backorder, altrimenti ''",
-  "expiration_date": "YYYY-MM-DD per prodotti deperibili (food/pharma)",
+  "expiration_date": "YYYY-MM-DD per deperibili",
 
-  "_comment_prezzo": "PREZZO & OFFERTE (compila solo se desumibili)",
-  "unit_pricing_measure": "es. '50 ml' (volume/peso del prodotto)",
-  "unit_pricing_base_measure": "es. '100 ml' (base calcolo prezzo unitario)",
+  "_comment_F": "===== PREZZO UNITARIO =====",
+  "unit_pricing_measure": "Volume/peso prodotto (es. '50 ml', '200 g')",
+  "unit_pricing_base_measure": "Base prezzo unitario (es. '100 ml', '1 kg')",
 
-  "_comment_spedizione": "SPEDIZIONE & DIMENSIONI",
-  "shipping_weight": "es. '500 g' o '2 kg'",
-  "shipping_length": "es. '30 cm' (lunghezza pacco)",
-  "shipping_width": "es. '20 cm'",
-  "shipping_height": "es. '10 cm'",
-  "product_length": "Lunghezza prodotto (es. '160 cm' mobili, '15.6\"' laptop)",
-  "product_width": "Larghezza prodotto",
-  "product_height": "Altezza prodotto",
-  "product_weight": "Peso prodotto (es. '1.8 kg' laptop)",
-
-  "_comment_bundle": "BUNDLE & MULTIPACK",
+  "_comment_G": "===== BUNDLE & MULTIPACK =====",
   "is_bundle": "yes|no|''",
-  "multipack": "Numero unità in multipack (es. '6') o '' se singolo",
+  "multipack": "Numero unità (es. '6') o '' se singolo",
 
-  "_comment_energia": "ENERGY LABEL (TV, monitor, elettrodomestici EU)",
+  "_comment_H": "===== SPEDIZIONE =====",
+  "shipping_weight": "Peso pacco (es. '2 kg', '500 g')",
+  "shipping_length": "Lunghezza pacco (es. '30 cm')",
+  "shipping_width": "Larghezza pacco",
+  "shipping_height": "Altezza pacco",
+  "shipping_label": "Etichetta logistica merchant (es. 'oversize', 'fragile', 'standard')",
+  "ships_from_country": "Paese ISO-2 (es. 'IT', 'DE')",
+  "min_handling_time": "Giorni preparazione min (es. '1')",
+  "max_handling_time": "Giorni preparazione max",
+  "transit_time_label": "Label tempi consegna",
+
+  "_comment_I": "===== ENERGY LABEL (TV/monitor/elettrodomestici EU) =====",
   "energy_efficiency_class": "A|B|C|D|E|F|G o '' se non applicabile",
-  "min_energy_efficiency_class": "Classe minima nella scala (es. 'G')",
+  "min_energy_efficiency_class": "Classe minima scala (es. 'G')",
   "max_energy_efficiency_class": "Classe massima (es. 'A')",
 
-  "_comment_highlights": "HIGHLIGHTS & DETAILS",
-  "product_highlight": ["6-10 bullet verificabili, max 150 char ciascuno"],
-  "product_detail": [
-    {"section_name": "Specifiche tecniche", "attribute_name": "Processore", "attribute_value": "Intel Core i7-12700H"},
-    {"section_name": "Connettività", "attribute_name": "Porte", "attribute_value": "2x USB-C Thunderbolt 4, HDMI 2.1"},
-    {"section_name": "Nella confezione", "attribute_name": "Accessori", "attribute_value": "Cavo USB-C, documentazione"}
+  "_comment_J": "===== CERTIFICATION (obbligatoria EU per energy label prodotti EPREL) =====",
+  "certification": [
+    {"authority": "EC", "name": "EPREL", "code": "M/2019/1783"}
   ],
 
-  "_comment_compatibilita": "COMPATIBILITÀ & RICAMBI (auto, accessori elettronica)",
-  "compatible_with": "Modelli compatibili (es. 'Volkswagen Golf VII 2012-2020')",
-  "oem_number": "Codice OEM originale (ricambi auto)",
+  "_comment_K": "===== HIGHLIGHTS (GMC: scannable bullets) =====",
+  "product_highlight": ["6-10 bullet verificabili, max 150 char ciascuno"],
 
-  "_comment_food_pharma": "FOOD / PHARMA / INTEGRATORI (solo se applicabile)",
-  "ingredients": "Lista ingredienti se food/cosmetics/integratori (stringa separata da virgole)",
-  "allergens": "Allergeni in evidenza per food (glutine, lattosio, frutta a guscio, ...)",
-  "active_ingredient": "Principio attivo per farmaci OTC (es. 'Paracetamolo 500mg')",
-  "pharmaceutical_form": "compresse|capsule|sciroppo|gel|spray|cerotto|''",
-  "dosage": "Posologia consigliata (solo OTC/integratori con claim EFSA)",
+  "_comment_L": "===== PRODUCT DETAIL (GMC structured: qualsiasi attributo non coperto sopra) =====",
+  "product_detail": [
+    {"section_name": "Specifiche tecniche", "attribute_name": "Processore", "attribute_value": "Intel Core i7-13700H"},
+    {"section_name": "Specifiche tecniche", "attribute_name": "RAM", "attribute_value": "16 GB DDR5"},
+    {"section_name": "Connettività", "attribute_name": "Porte", "attribute_value": "USB-C Thunderbolt 4, HDMI 2.1"},
+    {"section_name": "Nella confezione", "attribute_name": "Accessori", "attribute_value": "Cavo USB-C, documentazione"},
+    {"section_name": "Compatibilità", "attribute_name": "Veicoli", "attribute_value": "Volkswagen Golf VII 2012-2020"},
+    {"section_name": "Composizione", "attribute_name": "Principio attivo", "attribute_value": "Paracetamolo 500 mg"},
+    {"section_name": "Composizione", "attribute_name": "Ingredienti", "attribute_value": "Acqua, glicerina, acido ialuronico..."},
+    {"section_name": "Composizione", "attribute_name": "Allergeni", "attribute_value": "Contiene GLUTINE, tracce di soia"},
+    {"section_name": "Forma farmaceutica", "attribute_name": "Forma", "attribute_value": "Compresse rivestite"},
+    {"section_name": "Posologia", "attribute_name": "Adulti", "attribute_value": "1 cp ogni 6-8h, max 3/die"},
+    {"section_name": "Animale", "attribute_name": "Specie", "attribute_value": "Cane adulto piccola taglia"},
+    {"section_name": "Dimensioni", "attribute_name": "LxPxA", "attribute_value": "220 x 92 x 85 cm"},
+    {"section_name": "Origine", "attribute_name": "Paese", "attribute_value": "Made in Italy"}
+  ],
 
-  "_comment_pet": "PET (solo se prodotto per animali)",
-  "animal_species": "cane|gatto|uccelli|pesci|roditori|rettili|''",
-  "life_stage": "puppy|kitten|junior|adult|senior|all|''",
+  "_comment_M": "===== MEDIA =====",
+  "video_link": "URL video demo (solo se presente nel testo)",
+  "lifestyle_image_link": "URL immagine lifestyle/ambiente (solo se presente)",
 
-  "_comment_certificazioni": "CERTIFICAZIONI / OMOLOGAZIONI",
-  "certifications": ["CE", "FSC", "OEKO-TEX", "Bio IT-BIO-XXX", "DOP", "IGP", "..."],
+  "_comment_N": "===== DESTINATION & TAX =====",
+  "included_destination": ["Shopping_ads", "Free_listings", "Display_ads"],
+  "excluded_destination": [],
+  "tax_category": "Categoria fiscale se specificata (es. 'books', 'clothing')",
 
-  "_comment_origine": "ORIGINE",
-  "country_of_origin": "Paese produzione (es. 'Italy', 'Germany', 'China')",
-  "made_in_italy": "yes|no|'' (yes solo se è chiaramente Made in Italy)",
+  "_comment_O": "===== CUSTOM LABELS auto-derivate =====",
+  "custom_label_0": "stagione/collezione (FW25, SS26, evergreen)",
+  "custom_label_1": "fascia_prezzo (entry|mid|premium|luxury)",
+  "custom_label_2": "uso/occasione (daily, formale, sport, regalo)",
+  "custom_label_3": "",
+  "custom_label_4": "",
 
-  "_comment_media": "MEDIA (hint per il catalogo, non inventare URL)",
-  "has_video": "yes|no|'' (se video link nel testo)",
-
-  "_comment_keyword": "KEYWORDS SEO",
-  "keywords": ["array", "di", "keyword", "search-friendly"],
-
-  "_comment_custom_labels": "CUSTOM LABELS automatiche (derivate dalla descrizione)",
-  "custom_label_0": "stagione / collezione (FW25, SS26, evergreen, ...) se desumibile",
-  "custom_label_1": "fascia_prezzo (entry|mid|premium|luxury) se desumibile",
-  "custom_label_2": "uso/occasione (daily, formale, sport, regalo, ...)",
-
-  "_comment_performance": "SEGNALI PERFORMANCE INFERITI",
-  "target_audience": "Descrizione breve target (es. 'Professionisti creativi', 'Runner intermedi 20+ km/sett')"
+  "_comment_P": "===== META-ONLY (usati solo dall'export Meta Catalog) =====",
+  "title_meta": "Titolo Meta max 200 char, più descrittivo",
+  "description_meta_short": "Short description Meta max 200 char",
+  "fb_product_category": "Categoria Facebook se diversa da Google",
+  "rich_text_description": "HTML Meta (bold/italic/list) — vuoto se non desumibile"
 }
 
 REGOLE ASSOLUTE:
-1. **NON INVENTARE**: se un campo non è desumibile dal testo, lascia stringa vuota "" o array [].
-   MAI allucinare GTIN, prezzi, certificazioni, paesi origine, compatibilità.
-2. **SEMPRE popolati** quando desumibili: brand, color, size, material, gender, age_group, condition, product_highlight.
-3. **gtin/mpn**: popola solo se letterali nel testo. Se assenti: identifier_exists="no".
-4. **title e title_meta** DEVONO iniziare col brand.
-5. **product_highlight**: 6-10 bullet verificabili, max 150 char, OGNI bullet = una feature/spec misurabile.
-6. **product_detail**: 5-15 oggetti strutturati raggruppati per section_name logica (Specifiche, Connettività, Nella confezione, ...).
+1. **NOMI UFFICIALI GMC**: usa ESATTAMENTE i nomi sopra. Sono i nomi-colonna del feed supplementare.
+   Attributi non-standard (ingredienti, allergeni, principio_attivo, compatibilità, posologia, origine
+   Made in XXX, dimensioni prodotto, etc.) vanno DENTRO `product_detail` come oggetti strutturati
+   `{section_name, attribute_name, attribute_value}` — MAI come chiavi top-level inventate.
+2. **NON INVENTARE**: se non desumibile, stringa vuota o array vuoto. MAI allucinare GTIN, prezzi,
+   codici modello, certificazioni, paesi origine, compatibilità veicoli.
+3. **identifier_exists=no** solo se mancano sia gtin che mpn per un prodotto custom/vintage/no-brand.
+4. **product_highlight**: 6-10 bullet verificabili, max 150 char, ogni bullet = spec/feature misurabile.
+5. **product_detail**: 8-20 oggetti strutturati. Usa section_name standardizzati:
+   "Specifiche tecniche", "Connettività", "Nella confezione", "Compatibilità", "Composizione",
+   "Forma farmaceutica", "Posologia", "Animale", "Dimensioni", "Origine", "Valori nutrizionali",
+   "Alimentazione", "Installazione".
+6. **certification**: array di oggetti `{authority, name, code}`. Authority = ente (CE, EC, FSC, OEKO-TEX,
+   Bio IT-BIO-XXX, DOP, IGP). Esempio per TV: `[{"authority":"EC","name":"EPREL","code":"M/2021/123456"}]`.
+   Nessuna certificazione inventata — solo se letteralmente documentata nel testo.
 7. **description**: NO parole vietate (acquista, compra, offerta, sconto, migliore, gratis, imperdibile, emoji).
-8. **unit_pricing**: utile per cosmesi/food/drogheria (€/100ml, €/100g).
+8. **title, title_meta** iniziano col brand.
 9. **Rispondi SOLO con JSON valido, senza markdown, senza ``` di apertura/chiusura**.
-10. I campi "_comment_*" sono solo organizzatori — DEVI ometterli dalla risposta JSON, includi solo i campi con valori effettivi.
+10. Chiavi `_comment_*` omesse dalla risposta.
 """
 
 
@@ -377,43 +390,43 @@ def enrich_dataframe(
         except Exception:
             per_row_sector = {}
 
-    # nomi UFFICIALI Google/Meta — elenco completo attributi estraibili dall'AI
+    # ONLY OFFICIAL GMC + META NAMES — colonne direttamente usabili in feed supplementari
     official_cols = [
-        # Testi principali
-        "title", "description", "title_meta", "description_meta_short", "rich_text_description",
+        # Testi GMC
+        "title", "description",
         # Tassonomia
-        "google_product_category", "product_type", "fb_product_category",
-        # Identità
+        "google_product_category", "product_type",
+        # Identità GMC
         "brand", "gtin", "mpn", "identifier_exists", "item_group_id",
-        # Attributi apparel / electronics
-        "gender", "age_group", "color", "size", "size_system", "size_type",
+        # Attributi apparel / universali
+        "gender", "age_group", "adult",
+        "color", "size", "size_system", "size_type",
         "material", "pattern",
         # Stato
         "condition", "availability", "availability_date", "expiration_date",
         # Prezzi unitari
         "unit_pricing_measure", "unit_pricing_base_measure",
-        # Spedizione / dimensioni
-        "shipping_weight", "shipping_length", "shipping_width", "shipping_height",
-        "product_length", "product_width", "product_height", "product_weight",
         # Bundle
         "is_bundle", "multipack",
-        # Energia
+        # Spedizione
+        "shipping_weight", "shipping_length", "shipping_width", "shipping_height",
+        "shipping_label", "ships_from_country",
+        "min_handling_time", "max_handling_time", "transit_time_label",
+        # Energia (GMC official)
         "energy_efficiency_class", "min_energy_efficiency_class", "max_energy_efficiency_class",
-        # Highlights
+        # Certification (GMC structured)
+        "certification",
+        # Highlights & details (contengono tutti gli attributi non top-level)
         "product_highlight", "product_detail",
-        # Compatibilità
-        "compatible_with", "oem_number",
-        # Food / pharma
-        "ingredients", "allergens", "active_ingredient", "pharmaceutical_form", "dosage",
-        # Pet
-        "animal_species", "life_stage",
-        # Certificazioni / origine
-        "certifications", "country_of_origin", "made_in_italy",
-        # Media / target
-        "has_video", "target_audience",
-        # Keywords / custom labels
-        "keywords", "custom_label_0", "custom_label_1", "custom_label_2",
-        # Meta
+        # Media
+        "video_link", "lifestyle_image_link",
+        # Destination & tax
+        "included_destination", "excluded_destination", "tax_category",
+        # Custom labels
+        "custom_label_0", "custom_label_1", "custom_label_2", "custom_label_3", "custom_label_4",
+        # Meta-only
+        "title_meta", "description_meta_short", "fb_product_category", "rich_text_description",
+        # Meta interni (non GMC)
         "_enrichment_status", "_detected_sector",
     ]
     for c in official_cols:
@@ -440,26 +453,44 @@ def enrich_dataframe(
             result.setdefault("_detected_sector", effective_sector)
         return idx, result
 
-    # Campi che possono essere in formato lista/oggetto e vanno serializzati
-    _LIST_FIELDS = {"keywords", "product_highlight", "certifications"}
-    _STRUCT_LIST_FIELDS = {"product_detail"}  # lista di dict
+    # Serializzazione speciale per campi strutturati GMC
+    _STRUCT_LIST_FIELDS = {"product_detail"}       # [{section_name, attribute_name, attribute_value}]
+    _CERTIFICATION_FIELD = "certification"         # [{authority, name, code}]
+    _SIMPLE_LIST_FIELDS = {"included_destination", "excluded_destination"}
+    _PIPE_LIST_FIELDS = {"product_highlight"}      # GMC accetta multipli separati con |
     # Campi che esistono già e NON vanno sovrascritti se pieni (a meno che overwrite=True)
     _OVERRIDE_ALWAYS = {"title", "description", "title_meta", "description_meta_short",
                          "rich_text_description"}
 
     def _serialize(field: str, value) -> str:
-        """Serializza il valore AI nel formato stringa che salviamo nella cella."""
+        """Serializza il valore AI nel formato stringa GMC-compatibile."""
         if value is None:
             return ""
+        # product_detail: section_name:attribute_name=attribute_value | ... (multi-valore GMC)
         if field in _STRUCT_LIST_FIELDS and isinstance(value, list):
             return " | ".join(
                 f"{d.get('section_name', '')}:{d.get('attribute_name', '')}={d.get('attribute_value', '')}"
                 for d in value if isinstance(d, dict)
             )
-        if field in _LIST_FIELDS and isinstance(value, list):
-            if field == "product_highlight":
-                return " | ".join(str(b)[:150] for b in value[:10])
-            return ", ".join(str(x) for x in value)
+        # certification: authority:name:code | ... (GMC accepts multi-value with pipe)
+        if field == _CERTIFICATION_FIELD and isinstance(value, list):
+            parts = []
+            for d in value:
+                if isinstance(d, dict):
+                    a = d.get("authority", "")
+                    n = d.get("name", "")
+                    c = d.get("code", "")
+                    parts.append(f"{a}:{n}:{c}")
+                else:
+                    parts.append(str(d))
+            return " | ".join(p for p in parts if p.strip(":"))
+        # product_highlight: pipe separator, 150 char max per bullet
+        if field in _PIPE_LIST_FIELDS and isinstance(value, list):
+            return " | ".join(str(b)[:150] for b in value[:10])
+        # included_destination / excluded_destination: comma-separated standard GMC
+        if field in _SIMPLE_LIST_FIELDS and isinstance(value, list):
+            return ",".join(str(x) for x in value)
+        # Fallback list/dict → JSON
         if isinstance(value, (list, dict)):
             return json.dumps(value, ensure_ascii=False)
         return str(value).strip()
@@ -494,11 +525,11 @@ def enrich_dataframe(
                     if not current or current.lower() in ("nan", "none"):
                         df.at[idx, field] = serialized
                     else:
-                        # Se c'era già un valore nel feed originale per attributi canonici, rispetta l'originale
-                        # per campi identity (brand, gtin, mpn) — altrimenti sovrascrivi con AI
+                        # Campi identità / fonti autoritative: preserva l'originale del feed
                         if field in ("brand", "gtin", "mpn", "item_group_id",
-                                     "identifier_exists", "oem_number", "country_of_origin"):
-                            continue  # mantieni valore originale
+                                     "identifier_exists", "ships_from_country",
+                                     "tax_category", "min_handling_time", "max_handling_time"):
+                            continue
                         df.at[idx, field] = serialized
 
             done += 1
