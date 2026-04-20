@@ -130,18 +130,21 @@ def _extract_json(text: str) -> dict:
     return {}
 
 
-def _build_system_prompt(sector_name: str = "") -> str:
+def _build_system_prompt(sector_name: str = "", style_guide_text: str = "") -> str:
     """Compone il system prompt.
 
     Priorità:
       1. Template utente attivo (da utils/prompts.py) per questo sector → usato tale-e-quale
       2. BASE + brief settoriale YAML (default)
+    style_guide_text: testo style guide del catalogo, appeso per coerenza cross-prodotto.
     """
     # 1. Override utente via prompt versioning
     try:
         from . import prompts as _prompts
         body = _prompts.get_template_body(sector_name or "_default")
         if body:
+            if style_guide_text:
+                body = body + "\n" + style_guide_text
             return body
     except ImportError:
         pass
@@ -152,11 +155,14 @@ def _build_system_prompt(sector_name: str = "") -> str:
         if sector:
             parts.append("\n\n" + _sector_brief(sector))
             parts.append("\nApplica RIGOROSAMENTE queste regole settoriali a tutti i campi.")
+    if style_guide_text:
+        parts.append(style_guide_text)
     return "".join(parts)
 
 
 def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
-                   sector: str = "", max_tokens: int = 3500) -> dict:
+                   sector: str = "", max_tokens: int = 3500,
+                   style_guide_text: str = "") -> dict:
     """Chiama Claude per un singolo prodotto.
 
     Args:
@@ -185,7 +191,7 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
             max_tokens=max_tokens,
             system=[{
                 "type": "text",
-                "text": _build_system_prompt(sector),
+                "text": _build_system_prompt(sector, style_guide_text),
                 "cache_control": {"type": "ephemeral"},
             }],
             messages=[{"role": "user", "content": f"Prodotto:\n{input_txt}"}],
@@ -275,6 +281,7 @@ def enrich_dataframe(
     sector: str = "",
     overwrite_title_description: bool = True,
     max_tokens: int = 3500,
+    style_guide_text: str = "",
 ) -> pd.DataFrame:
     """Arricchisce l'intero dataframe in parallelo.
 
@@ -363,7 +370,7 @@ def enrich_dataframe(
         else:
             effective_sector = sector
         result = enrich_product(client, row, model=model, sector=effective_sector,
-                                max_tokens=max_tokens)
+                                max_tokens=max_tokens, style_guide_text=style_guide_text)
         if effective_sector:
             result.setdefault("_detected_sector", effective_sector)
         return idx, result

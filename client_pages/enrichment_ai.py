@@ -137,6 +137,50 @@ if sector == "auto":
             use_container_width=True, height=260,
         )
 
+# ============================================================
+# STYLE GUIDE — coerenza cross-prodotto (1 call Haiku upfront)
+# ============================================================
+from utils import catalog_style
+
+_style_ns = f"session_{st.session_state.get('session_id', 'default')}"
+existing_guide = catalog_style.load_guide(_style_ns)
+
+sgc1, sgc2, sgc3 = st.columns([2, 2, 1])
+use_style_guide = sgc1.checkbox(
+    "🧭 Usa style guide catalogo (coerenza cross-prodotto)",
+    value=bool(existing_guide),
+    help=(
+        "Analizza un campione del catalogo con Claude Haiku (~€0.01) ed estrae:\n"
+        "- Formula titolo uniforme\n"
+        "- Tono voce\n"
+        "- Pattern tassonomia\n"
+        "- Vocabolario preferito e vietato\n\n"
+        "Lo style guide viene iniettato nel system prompt di OGNI enrichment "
+        "successivo. Risultato: 100 prodotti con output coerente come da un "
+        "singolo prompt, non isolati. La guide resta cachata — zero overhead per chiamata."
+    ),
+)
+style_guide_text = ""
+if use_style_guide:
+    if sgc2.button("Genera / rigenera style guide", use_container_width=True,
+                    disabled=not st.session_state.get("api_key")):
+        with st.spinner("Analisi campione catalogo..."):
+            new_guide = catalog_style.analyze_catalog(
+                df, st.session_state["api_key"], sample_size=12
+            )
+        if new_guide and "_error" not in new_guide:
+            catalog_style.save_guide(_style_ns, new_guide)
+            existing_guide = new_guide
+            st.toast("Style guide generato", icon="🧭")
+            st.rerun()
+        else:
+            st.error(f"Errore generazione: {new_guide.get('_error', '?')}")
+    if existing_guide:
+        style_guide_text = catalog_style.format_for_prompt(existing_guide)
+        sgc3.metric("Token guide", len(style_guide_text) // 3)
+        with st.expander("Anteprima style guide"):
+            st.json(existing_guide)
+
 if sector and sector != "auto":
     with st.expander(f"📚 Best practice attive: {sector}"):
         s = load_sector(sector)
@@ -225,7 +269,8 @@ if launch:
                     df, api_key=st.session_state["api_key"], model=model,
                     max_workers=workers, limit=limit or None, progress_callback=cb,
                     sector=sector, overwrite_title_description=overwrite,
-                    max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 2048)),
+                    max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 3500)),
+                    style_guide_text=style_guide_text,
                 )
 
             # Salva i risultati OK in cache per riuso futuro
@@ -452,42 +497,68 @@ from utils.catalog_optimizer import build_google_feed, build_meta_feed
 
 st.markdown("#### Download")
 st.caption(
-    "**TSV Google / CSV Meta** = pronti per upload diretto (colonne = nomi ufficiali GMC/Meta Commerce, "
-    "price/condition/availability normalizzati, title/description troncati ai limiti). "
-    "**Raw** = dump completo per audit o elaborazione custom (include colonne interne e originali)."
+    "**TSV Google / CSV Meta** = pronti per upload diretto. "
+    "**Raw** = dump completo per audit. Puoi escludere colonne specifiche prima dell'export."
 )
+
+# Build Google / Meta ready dataframes
+try:
+    _google_ready = build_google_feed(enriched, currency="EUR")
+except Exception as _e:
+    _google_ready = None
+    st.warning(f"Errore Google feed: {_e}")
+try:
+    _meta_ready = build_meta_feed(enriched, currency="EUR")
+except Exception as _e:
+    _meta_ready = None
+    st.warning(f"Errore Meta feed: {_e}")
+
+# Column exclusion UI
+with st.expander("🧹 Escludi colonne dall'export", expanded=False):
+    ex_cols_g = st.multiselect(
+        "Colonne da escludere dal TSV Google",
+        options=list(_google_ready.columns) if _google_ready is not None else [],
+        default=[],
+        key="_excl_google",
+    )
+    ex_cols_m = st.multiselect(
+        "Colonne da escludere dal CSV Meta",
+        options=list(_meta_ready.columns) if _meta_ready is not None else [],
+        default=[],
+        key="_excl_meta",
+    )
+    ex_cols_raw = st.multiselect(
+        "Colonne da escludere dal CSV raw",
+        options=list(enriched.columns),
+        default=[c for c in enriched.columns if c.startswith("_") or c.endswith("_original")],
+        key="_excl_raw",
+    )
 
 dc1, dc2, dc3, dc4 = st.columns(4)
 
-# TSV Google-ready (filtra solo campi ufficiali GMC)
-try:
-    _google_ready = build_google_feed(enriched, currency="EUR")
+if _google_ready is not None:
+    _gdf = _google_ready.drop(columns=ex_cols_g, errors="ignore")
     dc1.download_button(
         "⬇️ TSV Google (GMC-ready)",
-        _google_ready.to_csv(index=False, sep="\t").encode("utf-8"),
+        _gdf.to_csv(index=False, sep="\t").encode("utf-8"),
         file_name="google_feed.tsv",
         mime="text/tab-separated-values",
         use_container_width=True,
-        help="Upload diretto su Google Merchant Center → Feed → Aggiungi → Carica file TSV.",
+        help=f"{len(_gdf.columns)} colonne. Upload diretto su Google Merchant Center → Feed → Aggiungi → Carica TSV.",
     )
-except Exception as _e:
-    dc1.warning(f"Google feed: {_e}")
 
-# CSV Meta-ready (filtra solo campi ufficiali Meta)
-try:
-    _meta_ready = build_meta_feed(enriched, currency="EUR")
+if _meta_ready is not None:
+    _mdf = _meta_ready.drop(columns=ex_cols_m, errors="ignore")
     dc2.download_button(
         "⬇️ CSV Meta (Commerce-ready)",
-        _meta_ready.to_csv(index=False).encode("utf-8"),
+        _mdf.to_csv(index=False).encode("utf-8"),
         file_name="meta_feed.csv",
         mime="text/csv",
         use_container_width=True,
-        help="Upload diretto su Meta Commerce Manager → Cataloghi → Aggiungi prodotti → Da file di dati.",
+        help=f"{len(_mdf.columns)} colonne. Upload diretto su Meta Commerce Manager → Cataloghi → Aggiungi prodotti → Da file di dati.",
     )
-except Exception as _e:
-    dc2.warning(f"Meta feed: {_e}")
 
-# Excel multi-foglio
+# Excel multi-foglio (no exclusion su Excel per semplicità)
 dc3.download_button(
     "Excel arricchito",
     to_excel_bytes({"enriched": enriched}),
@@ -496,14 +567,16 @@ dc3.download_button(
     use_container_width=True,
     help="Excel con tutti i dati arricchiti (raw, per audit).",
 )
-# CSV raw (tutti i campi, per debug / integrazione custom)
+
+# CSV raw con esclusione
+_raw_df = enriched.drop(columns=ex_cols_raw, errors="ignore")
 dc4.download_button(
-    "CSV raw (tutti i campi)",
-    enriched.to_csv(index=False).encode("utf-8"),
+    f"CSV raw ({len(_raw_df.columns)} col.)",
+    _raw_df.to_csv(index=False).encode("utf-8"),
     "feed_enriched_raw.csv",
     "text/csv",
     use_container_width=True,
-    help="Include anche colonne interne (_enrichment_status, title_original, ecc.). NON uploadabile GMC/Meta.",
+    help="Default: esclude colonne interne (_*) e originali (_original). Personalizzabile sopra.",
 )
 
 # ============================================================

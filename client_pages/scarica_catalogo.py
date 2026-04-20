@@ -159,23 +159,31 @@ if google_df is not None:
         st.plotly_chart(fig, use_container_width=True)
 
     with tabs[3]:
+        ex_g = st.multiselect(
+            "🧹 Escludi colonne dall'export Google",
+            options=list(google_df.columns), default=[],
+            key="_scarica_excl_google",
+            help="Colonne selezionate non saranno incluse in TSV/CSV/XML/Excel generati qui.",
+        )
+        _gd = google_df.drop(columns=ex_g, errors="ignore")
+
         e1, e2, e3, e4 = st.columns(4)
-        e1.download_button("CSV (TSV per GMC)",
-                            google_df.to_csv(index=False, sep="\t").encode("utf-8"),
+        e1.download_button(f"CSV (TSV per GMC) · {len(_gd.columns)} col.",
+                            _gd.to_csv(index=False, sep="\t").encode("utf-8"),
                             "google_feed.tsv", "text/tab-separated-values",
                             use_container_width=True,
                             help="GMC accetta TSV (tab-separated) come formato preferito")
         e2.download_button("Excel",
-                            to_excel_bytes({"google_feed": google_df}),
+                            to_excel_bytes({"google_feed": _gd}),
                             "google_feed.xlsx",
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True)
         e3.download_button("XML (RSS 2.0 GMC)",
-                            to_gmc_xml(google_df, "Google Feed").encode("utf-8"),
+                            to_gmc_xml(_gd, "Google Feed").encode("utf-8"),
                             "google_feed.xml", "application/xml",
                             use_container_width=True)
         e4.download_button("CSV standard",
-                            google_df.to_csv(index=False).encode("utf-8"),
+                            _gd.to_csv(index=False).encode("utf-8"),
                             "google_feed.csv", "text/csv",
                             use_container_width=True)
 
@@ -225,18 +233,26 @@ if meta_df is not None:
         kc[3].metric("Duplicati", int(q["duplicates"][0]))
 
     with tabs[3]:
+        ex_m = st.multiselect(
+            "🧹 Escludi colonne dall'export Meta",
+            options=list(meta_df.columns), default=[],
+            key="_scarica_excl_meta",
+            help="Colonne selezionate non saranno incluse in CSV/XML/Excel.",
+        )
+        _md = meta_df.drop(columns=ex_m, errors="ignore")
+
         e1, e2, e3 = st.columns(3)
-        e1.download_button("CSV (Meta format)",
-                            meta_df.to_csv(index=False).encode("utf-8"),
+        e1.download_button(f"CSV (Meta format) · {len(_md.columns)} col.",
+                            _md.to_csv(index=False).encode("utf-8"),
                             "meta_feed.csv", "text/csv",
                             use_container_width=True)
         e2.download_button("Excel",
-                            to_excel_bytes({"meta_feed": meta_df}),
+                            to_excel_bytes({"meta_feed": _md}),
                             "meta_feed.xlsx",
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True)
         e3.download_button("XML",
-                            to_gmc_xml(meta_df, "Meta Feed").encode("utf-8"),
+                            to_gmc_xml(_md, "Meta Feed").encode("utf-8"),
                             "meta_feed.xml", "application/xml",
                             use_container_width=True)
 
