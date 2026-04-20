@@ -239,17 +239,53 @@ def _normalize_condition(v: str) -> str:
 
 
 def _normalize_price(v: str, currency: str = "EUR") -> str:
+    """Normalizza un prezzo nel formato GMC 'NNN.NN EUR'.
+
+    Gestisce:
+      - Valore vuoto / NA → ''
+      - Multi-valore pipe/slash (es. '23.9 EUR | 5.90 EUR') → prende PRIMO
+      - Stringhe con valuta (es. '23.90 EUR', '€23.90', 'EUR 23.90') → normalizza
+      - Numeri puri (es. '23,90', '23.90') → formatta con valuta default
+      - Migliaia con separatore (es. '1.234,56' IT o '1,234.56' US) → parse robusto
+    """
     s = str(v).strip()
     if not s or s.lower() in ("nan", "none"):
         return ""
-    # se già contiene una valuta, lascia
-    if re.search(r"[A-Z]{3}", s):
-        return s
-    num = re.sub(r"[^\d.,-]", "", s).replace(",", ".")
+
+    # Multi-valore: pipe / slash / virgola-spazio — prendi SOLO il primo
+    for sep in (" | ", "|", " / ", " // ", " - "):
+        if sep in s:
+            s = s.split(sep)[0].strip()
+            break
+
+    # Estrai la prima occorrenza numerica (gestisce '€23,90', 'EUR 23.90', '23.90 EUR')
+    m = re.search(r"(-?\d[\d.,]*)", s)
+    if not m:
+        return ""
+    raw = m.group(1)
+
+    # Determina separatori decimali/migliaia
+    if "," in raw and "." in raw:
+        # Decidi quale è decimale (ultimo separatore)
+        if raw.rfind(",") > raw.rfind("."):
+            num = raw.replace(".", "").replace(",", ".")  # formato IT 1.234,56
+        else:
+            num = raw.replace(",", "")                     # formato US 1,234.56
+    elif "," in raw:
+        # "23,90" IT → 23.90; oppure "1,234" US (ma ambiguo — preferiamo IT)
+        # Se ha 3 cifre dopo la virgola senza altro separatore, trattiamo come migliaia US
+        frac = raw.rsplit(",", 1)[-1]
+        if len(frac) == 3 and raw.count(",") == 1 and not raw.startswith("0"):
+            num = raw.replace(",", "")
+        else:
+            num = raw.replace(",", ".")
+    else:
+        num = raw
+
     try:
         return f"{float(num):.2f} {currency}"
     except ValueError:
-        return s
+        return ""
 
 
 def _truncate(text: str, max_len: int) -> str:
