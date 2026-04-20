@@ -187,6 +187,7 @@ if launch:
                     df, api_key=st.session_state["api_key"], model=model,
                     max_workers=workers, limit=limit or None, progress_callback=cb,
                     sector=sector, overwrite_title_description=overwrite,
+                    max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 2048)),
                 )
 
             # Salva i risultati OK in cache per riuso futuro

@@ -155,8 +155,14 @@ def _build_system_prompt(sector_name: str = "") -> str:
 
 
 def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
-                   sector: str = "") -> dict:
-    """Chiama Claude per un singolo prodotto."""
+                   sector: str = "", max_tokens: int = 2048) -> dict:
+    """Chiama Claude per un singolo prodotto.
+
+    Args:
+        max_tokens: tetto token output. 2048 default perché il JSON completo
+        (20+ campi con product_highlight[] e product_detail[]) supera spesso 1500 token
+        su prodotti con description lunga.
+    """
     payload = {
         "title": product.get("title", ""),
         "description": str(product.get("description", ""))[:1500],
@@ -175,7 +181,7 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
     try:
         resp = client.messages.create(
             model=model,
-            max_tokens=1024,
+            max_tokens=max_tokens,
             system=[{
                 "type": "text",
                 "text": _build_system_prompt(sector),
@@ -184,11 +190,22 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
             messages=[{"role": "user", "content": f"Prodotto:\n{input_txt}"}],
         )
         text = resp.content[0].text if resp.content else ""
+        stop_reason = getattr(resp, "stop_reason", "") or ""
         data = _extract_json(text)
-        data["_enrichment_status"] = "ok" if data else "empty"
-        return data
+        if data:
+            data["_enrichment_status"] = "ok"
+            return data
+        # Empty parse — attach debug context so the UI shows WHY
+        snippet = (text or "").strip()[:180].replace("\n", " ")
+        if stop_reason == "max_tokens":
+            status = f"empty:max_tokens (alza max_tokens, risposta troncata)"
+        elif not text:
+            status = "empty:no_text (Claude non ha risposto)"
+        else:
+            status = f"empty:no_json ({snippet}...)"
+        return {"_enrichment_status": status}
     except Exception as e:
-        return {"_enrichment_status": f"error: {e}"}
+        return {"_enrichment_status": f"error: {type(e).__name__}: {e}"}
 
 
 REFINE_SYSTEM = """Sei un copywriter e-commerce. Ricevi un prodotto già arricchito (titolo ottimizzato, descrizione, attributi) e un'istruzione dell'utente.
@@ -249,6 +266,7 @@ def enrich_dataframe(
     progress_callback=None,
     sector: str = "",
     overwrite_title_description: bool = True,
+    max_tokens: int = 2048,
 ) -> pd.DataFrame:
     """Arricchisce l'intero dataframe in parallelo.
 
@@ -303,7 +321,8 @@ def enrich_dataframe(
             effective_sector = per_row_sector.get(idx) or ""
         else:
             effective_sector = sector
-        result = enrich_product(client, row, model=model, sector=effective_sector)
+        result = enrich_product(client, row, model=model, sector=effective_sector,
+                                max_tokens=max_tokens)
         if effective_sector:
             result.setdefault("_detected_sector", effective_sector)
         return idx, result

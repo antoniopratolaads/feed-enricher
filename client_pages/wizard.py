@@ -421,7 +421,8 @@ elif step == 3:
             try:
                 enr = enrich_dataframe(df, api_key=st.session_state["api_key"], model=model,
                                         max_workers=5, limit=limit, progress_callback=cb,
-                                        sector=sector, overwrite_title_description=True)
+                                        sector=sector, overwrite_title_description=True,
+                                        max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 2048)))
                 st.session_state["enriched_df"] = enr
                 save_snapshot(st.session_state["session_id"], st.session_state)
                 log_event(st.session_state["session_id"], "enrichment_done",
