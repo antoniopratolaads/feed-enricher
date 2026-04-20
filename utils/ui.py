@@ -146,20 +146,27 @@ p, .stMarkdown { color: var(--text-primary); line-height: 1.6; }
     padding-top: 0.5rem;
     min-width: 244px !important;
     max-width: 340px !important;
+    width: 300px !important;
+    transform: none !important;  /* annulla il collapse -300px: sidebar sempre visibile */
+    position: relative !important;
+    left: 0 !important;
+    visibility: visible !important;
+    display: block !important;
 }
-[data-testid="stSidebar"][aria-expanded="false"] {
-    min-width: 0 !important;
-    max-width: 0 !important;
+/* Sidebar nav sempre cliccabile anche se Streamlit la considera chiusa */
+[data-testid="stSidebar"][aria-expanded="false"],
+[data-testid="stSidebar"][aria-expanded="true"] {
+    min-width: 244px !important;
+    max-width: 340px !important;
+    width: 300px !important;
+    transform: none !important;
 }
-/* Toggle button sempre visibile e cliccabile */
-[data-testid="stSidebarCollapsedControl"],
-[data-testid="stSidebarCollapseButton"],
+/* Rendi il toggle button non necessario (nascondiamo per evitare confusione) */
 [data-testid="stBaseButton-headerNoPadding"] {
     display: inline-flex !important;
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-    z-index: 999 !important;
 }
 [data-testid="stSidebar"] h3 {
     font-size: 0.7rem !important;
