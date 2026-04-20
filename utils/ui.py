@@ -647,38 +647,8 @@ pre code {
 """
 
 
-_SIDEBAR_FORCE_OPEN_JS = """
-<script>
-(function resetSidebarState() {
-    const win = window.parent || window;
-    try {
-        const ls = win.localStorage;
-        // Streamlit memorizza 'stSidebarCollapsed-' in localStorage.
-        // Se e' 'true' (collapsed), cancella e ricarica per aprire sidebar.
-        const key = 'stSidebarCollapsed-';
-        const value = ls.getItem(key);
-        if (value && value.toLowerCase() === 'true') {
-            ls.removeItem(key);
-            // Reload una volta per applicare
-            if (!win.sessionStorage.getItem('_sidebar_reset')) {
-                win.sessionStorage.setItem('_sidebar_reset', '1');
-                win.location.reload();
-            }
-        }
-    } catch(e) {}
-})();
-</script>
-"""
-
-
 def apply_theme():
     st.markdown(HORIZON_CSS, unsafe_allow_html=True)
-    # JS deve girare in iframe component per accedere a window.parent.document
-    try:
-        import streamlit.components.v1 as _components
-        _components.html(_SIDEBAR_FORCE_OPEN_JS, height=0, width=0)
-    except Exception:
-        pass
 
 
 def page_header(title: str, subtitle: str = ""):
