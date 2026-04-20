@@ -144,6 +144,22 @@ p, .stMarkdown { color: var(--text-primary); line-height: 1.6; }
     background: var(--bg-elevated) !important;
     border-right: 1px solid var(--border) !important;
     padding-top: 0.5rem;
+    min-width: 244px !important;
+    max-width: 340px !important;
+}
+[data-testid="stSidebar"][aria-expanded="false"] {
+    min-width: 0 !important;
+    max-width: 0 !important;
+}
+/* Toggle button sempre visibile e cliccabile */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stBaseButton-headerNoPadding"] {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 999 !important;
 }
 [data-testid="stSidebar"] h3 {
     font-size: 0.7rem !important;
