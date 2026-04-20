@@ -140,12 +140,15 @@ p, .stMarkdown { color: var(--text-primary); line-height: 1.6; }
 /* ============================================================
    SIDEBAR
    ============================================================ */
-section[data-testid="stSidebar"],
-section[data-testid="stSidebar"][aria-expanded="false"],
-section[data-testid="stSidebar"][aria-expanded="true"] {
+/* Specificità alta per battere emotion CSS: #root + tag + attribute */
+#root section[data-testid="stSidebar"],
+#root section.stSidebar,
+html body section[data-testid="stSidebar"],
+html body section[data-testid="stSidebar"][aria-expanded="false"],
+html body section[data-testid="stSidebar"][aria-expanded="true"] {
     background: #FFFFFF !important;
     border-right: 1px solid #E5E7EB !important;
-    padding-top: 0.5rem;
+    padding-top: 0.5rem !important;
     min-width: 244px !important;
     max-width: 340px !important;
     width: 300px !important;
@@ -157,13 +160,7 @@ section[data-testid="stSidebar"][aria-expanded="true"] {
     display: block !important;
     opacity: 1 !important;
     z-index: 10 !important;
-}
-/* Target anche classe emotion specifica */
-section.stSidebar, div[class*="stSidebar"] {
-    transform: translateX(0) !important;
-    min-width: 244px !important;
-    max-width: 340px !important;
-    width: 300px !important;
+    flex: 0 0 300px !important;
 }
 /* Rendi il toggle button non necessario (nascondiamo per evitare confusione) */
 [data-testid="stBaseButton-headerNoPadding"] {
@@ -661,30 +658,35 @@ pre code {
 _SIDEBAR_FORCE_OPEN_JS = """
 <script>
 (function ensureSidebarOpen() {
-    const tryOpen = () => {
-        const sb = window.parent.document.querySelector('[data-testid="stSidebar"]');
-        if (!sb) { return false; }
-        // Se il sidebar è visualmente collapsed, clicca il pulsante di riapertura
-        if (sb.getAttribute('aria-expanded') === 'false') {
-            const reopen = window.parent.document.querySelector(
-                '[data-testid="stSidebarCollapsedControl"] button, ' +
-                '[data-testid="stSidebarCollapsedControl"]'
-            );
-            if (reopen) { reopen.click(); return true; }
-        }
-        // Inoltre forza stili inline per bypassare emotion CSS
+    const doc = (window.parent && window.parent.document) || document;
+    function forceStyles(sb) {
         sb.style.setProperty('min-width', '244px', 'important');
         sb.style.setProperty('max-width', '340px', 'important');
         sb.style.setProperty('width', '300px', 'important');
-        sb.style.setProperty('transform', 'none', 'important');
+        sb.style.setProperty('transform', 'translateX(0)', 'important');
         sb.style.setProperty('visibility', 'visible', 'important');
+        sb.style.setProperty('display', 'block', 'important');
+        sb.style.setProperty('opacity', '1', 'important');
+        sb.style.setProperty('flex', '0 0 300px', 'important');
+    }
+    function apply() {
+        const sb = doc.querySelector('[data-testid="stSidebar"]');
+        if (!sb) return false;
+        forceStyles(sb);
         return true;
-    };
-    // Retry finché DOM pronto
+    }
+    // Apply ogni 200ms per 15s — cattura anche re-render Streamlit
     let tries = 0;
     const iv = setInterval(() => {
-        if (tryOpen() || ++tries > 40) clearInterval(iv);
-    }, 150);
+        apply();
+        if (++tries > 75) clearInterval(iv);
+    }, 200);
+    // MutationObserver permanente — riapplica se Streamlit cambia stile sidebar
+    try {
+        const obs = new MutationObserver(() => apply());
+        obs.observe(doc.body, {subtree: true, childList: true, attributes: true,
+                               attributeFilter: ['style', 'aria-expanded']});
+    } catch (_) {}
 })();
 </script>
 """
