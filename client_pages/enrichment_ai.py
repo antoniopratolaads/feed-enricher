@@ -45,7 +45,12 @@ if not st.session_state.get("api_key"):
     )
     st.stop()
 
-df = st.session_state["feed_df"]
+# Usa enriched_df come sorgente principale se esiste, altrimenti feed_df.
+# Questo garantisce che selezione + Risultati vedano la stessa data.
+df = st.session_state.get("enriched_df")
+if df is None or df.empty:
+    df = st.session_state["feed_df"].copy()
+    st.session_state["enriched_df"] = df
 
 # ============================================================
 # HEADER METRICS
@@ -131,7 +136,7 @@ else:
         display_df.drop(columns=["_enrichment_status"], inplace=True)
 
     # Quick action buttons
-    sc1, sc2, sc3, sc4 = st.columns([1.6, 1.6, 1.6, 3])
+    sc1, sc2, sc3, sc4, sc5 = st.columns([1.4, 1.4, 1.4, 1.6, 2.2])
     if sc1.button(f"✔ Tutti visibili ({len(filtered):,})",
                     use_container_width=True, key="_sel_all_visible"):
         st.session_state["_force_sel"] = filtered.index.tolist()
@@ -141,6 +146,15 @@ else:
         st.session_state["_force_sel"] = un_idx
     if sc3.button("☐ Deseleziona tutti", use_container_width=True, key="_sel_none"):
         st.session_state["_force_sel"] = []
+
+    # Seleziona primi N visibili (per batch rapido)
+    with sc4:
+        n_quick = st.number_input("Primi N", min_value=1, max_value=max(len(filtered), 1),
+                                    value=min(50, len(filtered)), step=10, key="_sel_n",
+                                    label_visibility="collapsed")
+    if sc5.button(f"⚡ Seleziona primi {int(n_quick):,} visibili",
+                    use_container_width=True, key="_sel_first_n"):
+        st.session_state["_force_sel"] = filtered.index[:int(n_quick)].tolist()
 
     forced = st.session_state.get("_force_sel")
     if forced is not None:
@@ -164,10 +178,10 @@ else:
     )
     selected_indices = edited.index[edited["✔ Seleziona"]].tolist()
 
-    sc4.markdown(
+    st.markdown(
         f"<div style='background:#EEF4FF; border:1px solid #DCE7FE; border-radius:10px; "
-        f"padding:10px 14px; font-weight:600; color:#2F6FED; text-align:center;'>"
-        f"✨ {len(selected_indices):,} selezionati · {len(filtered):,} visibili"
+        f"padding:10px 14px; font-weight:600; color:#2F6FED; text-align:center; margin:8px 0;'>"
+        f"✨ {len(selected_indices):,} selezionati · {len(filtered):,} visibili · {n_total:,} totali"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -397,6 +411,43 @@ c1.metric("OK", int(ok))
 c2.metric("Da cache", int(cached_n))
 c3.metric("Errori", int(errors))
 c4.metric("Vuoti", len(enriched) - int(ok) - int(cached_n) - int(errors))
+
+# ============================================================
+# DOWNLOAD CATALOGO (in cima ai risultati - ben visibile)
+# ============================================================
+if int(ok) + int(cached_n) > 0:
+    from utils.catalog_optimizer import build_google_feed as _bgf, build_meta_feed as _bmf
+    st.markdown(
+        "<div style='background:linear-gradient(135deg, #2F6FED 0%, #1A4BB5 100%); "
+        "border-radius:14px; padding:16px 20px; color:#fff; margin:10px 0 14px;'>"
+        "<div style='font-weight:700; font-size:1rem;'>📥 Scarica catalogo arricchito</div>"
+        "<div style='font-size:0.85rem; opacity:0.9; margin-top:4px;'>"
+        "TSV Google + CSV Meta pronti per upload diretto a Merchant Center / Commerce Manager."
+        "</div></div>",
+        unsafe_allow_html=True,
+    )
+    try:
+        _dl_google = _bgf(enriched, currency="EUR")
+        _dl_meta = _bmf(enriched, currency="EUR")
+        dlc1, dlc2, dlc3 = st.columns(3)
+        dlc1.download_button(
+            "⬇️ TSV Google (GMC-ready)",
+            _dl_google.to_csv(index=False, sep="\t").encode("utf-8"),
+            file_name="google_feed.tsv", mime="text/tab-separated-values",
+            use_container_width=True, type="primary",
+        )
+        dlc2.download_button(
+            "⬇️ CSV Meta (Commerce-ready)",
+            _dl_meta.to_csv(index=False).encode("utf-8"),
+            file_name="meta_feed.csv", mime="text/csv",
+            use_container_width=True, type="primary",
+        )
+        if dlc3.button("Vai a Catalog Optimizer →", use_container_width=True,
+                        key="_go_catalog_opt",
+                        help="Export avanzati: Excel, XML, validation report, delta diff, bundle ZIP"):
+            st.switch_page("client_pages/scarica_catalogo.py")
+    except Exception as _e:
+        st.warning(f"Errore build feed: {_e}")
 
 # Diff preview for first N products that were actually modified
 if show_diff:
