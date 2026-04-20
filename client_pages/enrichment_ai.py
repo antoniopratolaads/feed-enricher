@@ -48,340 +48,315 @@ if not st.session_state.get("api_key"):
 df = st.session_state["feed_df"]
 
 # ============================================================
-# CONFIG ENRICHMENT
+# HEADER METRICS
 # ============================================================
-c1, c2, c3, c4 = st.columns(4)
-_ALL_MODELS = [
-    # Anthropic Claude
-    "claude-opus-4-6",
-    "claude-sonnet-4-6",
-    "claude-haiku-4-5-20251001",
-    "claude-haiku-3-5",
-    # OpenAI GPT-5
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    # OpenAI GPT-4.1
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    # OpenAI GPT-4o
-    "gpt-4o",
-    "gpt-4o-mini",
-    # OpenAI reasoning
-    "o3",
-    "o3-mini",
-    "o4-mini",
-]
-model = c1.selectbox(
-    "Modello", _ALL_MODELS,
-    index=_ALL_MODELS.index("claude-sonnet-4-6"),
-    help="Sweet spot qualità/costo: claude-sonnet-4-6 o gpt-4.1-mini. "
-         "Per risparmiare al massimo: claude-haiku-4-5, gpt-4.1-nano, gpt-5-nano.",
+if "_enrichment_status" not in df.columns:
+    df["_enrichment_status"] = ""
+_status_lower = df["_enrichment_status"].astype(str).str.strip().str.lower()
+n_total = len(df)
+n_enriched = int(_status_lower.isin(["ok", "cached"]).sum())
+n_todo = n_total - n_enriched
+
+mc = st.columns(3)
+mc[0].metric("Prodotti totali", f"{n_total:,}")
+mc[1].metric("Già arricchiti", f"{n_enriched:,}", help="Status 'ok' o 'cached'")
+mc[2].metric("Da arricchire", f"{n_todo:,}", help="Non arricchiti o con errore")
+
+st.markdown("### Seleziona prodotti da arricchire")
+st.caption(
+    "Usa i filtri per restringere, poi spunta i prodotti. "
+    "Le **Opzioni avanzate** in fondo controllano modello/settore/target."
 )
 
-sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
-default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
-sector_choice = c2.selectbox(
-    "Settore (best practice)",
-    sectors,
-    index=default_idx,
-    help=(
-        "• (generico): prompt base, nessuna specializzazione\n"
-        "• auto (multi-settore): il tool classifica ogni prodotto e applica le regole del suo settore\n"
-        "• settore specifico: applica best practice YAML di quel settore a TUTTI i prodotti"
-    ),
-)
-if sector_choice == "(generico)":
-    sector = ""
-elif sector_choice.startswith("✨ auto"):
-    sector = "auto"
+# ============================================================
+# FILTRI
+# ============================================================
+fc1, fc2, fc3, fc4 = st.columns([2, 2, 2, 2])
+search = fc1.text_input("🔎 Cerca title/brand/id", placeholder="es. Nike, T-shirt, ABC123",
+                         key="_enrich_search")
+brand_options = sorted(df["brand"].dropna().astype(str).unique().tolist()) \
+                 if "brand" in df.columns else []
+brand_filter = fc2.multiselect("Brand", options=brand_options, default=[],
+                                 key="_enrich_brand_filter")
+cat_col = "google_product_category" if "google_product_category" in df.columns \
+          else ("product_type" if "product_type" in df.columns else None)
+cat_options = sorted(df[cat_col].dropna().astype(str).unique().tolist()) if cat_col else []
+cat_filter = fc3.multiselect("Categoria" if cat_col else "Categoria (non disp.)",
+                              options=cat_options, default=[], key="_enrich_cat_filter",
+                              disabled=not cat_col)
+status_choice = fc4.selectbox("Status enrichment",
+                               options=["Tutti", "Solo non arricchiti", "Solo arricchiti", "Solo errori"],
+                               index=0, key="_enrich_status_filter")
+
+mask = pd.Series([True] * len(df), index=df.index)
+if search:
+    s = search.lower()
+    search_cols = [c for c in ("title", "brand", "id", "product_type") if c in df.columns]
+    text_mask = pd.Series([False] * len(df), index=df.index)
+    for c in search_cols:
+        text_mask |= df[c].astype(str).str.lower().str.contains(s, na=False)
+    mask &= text_mask
+if brand_filter and "brand" in df.columns:
+    mask &= df["brand"].astype(str).isin(brand_filter)
+if cat_filter and cat_col:
+    mask &= df[cat_col].astype(str).isin(cat_filter)
+if status_choice == "Solo non arricchiti":
+    mask &= ~_status_lower.isin(["ok", "cached"])
+elif status_choice == "Solo arricchiti":
+    mask &= _status_lower.isin(["ok", "cached"])
+elif status_choice == "Solo errori":
+    mask &= _status_lower.str.startswith("error")
+
+filtered = df[mask].copy()
+
+# ============================================================
+# TABELLA SELEZIONE (checkbox + badge status)
+# ============================================================
+selected_indices: list = []
+if filtered.empty:
+    st.info("Nessun prodotto corrisponde ai filtri.")
 else:
-    sector = sector_choice
+    def _badge(s):
+        s = str(s).strip().lower()
+        return {"ok": "🟢 OK", "cached": "🔵 Cache", "reverted": "↶ Undo"}.get(s,
+               "🔴 Errore" if s.startswith("error") else
+               "🟡 Vuoto" if s.startswith("empty") else "⚪ —")
 
-limit = c3.number_input("Limite prodotti (0 = tutti)", min_value=0, value=min(50, len(df)), step=10)
-workers = c4.slider("Parallelismo", 1, 15, 5)
+    display_cols = [c for c in ("id", "title", "brand", "price", "_enrichment_status")
+                     if c in filtered.columns]
+    display_df = filtered[display_cols].copy()
+    display_df.insert(0, "✔ Seleziona", False)
+    if "_enrichment_status" in display_df.columns:
+        display_df["Stato"] = display_df["_enrichment_status"].apply(_badge)
+        display_df.drop(columns=["_enrichment_status"], inplace=True)
 
-oc1, oc2, oc3 = st.columns([2, 2, 2])
-overwrite = oc1.checkbox(
-    "Sovrascrivi `title` e `description` con la versione AI",
-    value=True,
-    help="Gli originali vengono salvati in `title_original` / `description_original` come backup. "
-         "Vengono anche popolati colore/taglia/materiale/brand se mancanti."
-)
-skip_already_enriched = oc2.checkbox(
-    "Salta prodotti già arricchiti",
-    value=True,
-    help=(
-        "Filtra fuori prodotti con `_enrichment_status` = 'ok' o 'cached' prima di applicare "
-        "il limite. Decheck per forzare re-enrichment."
-    ),
-)
-target_choice = oc3.radio(
-    "Target enrichment",
-    options=["both", "google", "meta"],
-    format_func=lambda v: {"both": "🛒📘 Entrambi", "google": "🛒 Solo Google", "meta": "📘 Solo Meta"}[v],
-    horizontal=True,
-    help=(
-        "**Entrambi** (default): popola tutti i campi GMC + Meta.\n\n"
-        "**Solo Google**: skippa campi Meta-only (title_meta, short_description, "
-        "rich_text_description, fb_product_category, origin_country, manufacturer_info, "
-        "importer_*, commerce_tax_category, status, video). Risparmia ~15% token output.\n\n"
-        "**Solo Meta**: skippa campi GMC-only (certification, tax_category, included/"
-        "excluded_destination, transit_time_label, promotion_id). Risparmio ~10%."
-    ),
-)
+    # Quick action buttons
+    sc1, sc2, sc3, sc4 = st.columns([1.6, 1.6, 1.6, 3])
+    if sc1.button(f"✔ Tutti visibili ({len(filtered):,})",
+                    use_container_width=True, key="_sel_all_visible"):
+        st.session_state["_force_sel"] = filtered.index.tolist()
+    if sc2.button("🟢 Non arricchiti visibili", use_container_width=True, key="_sel_unenr"):
+        un_idx = filtered[~filtered["_enrichment_status"].astype(str).str.strip().str.lower()
+                          .isin(["ok", "cached"])].index.tolist()
+        st.session_state["_force_sel"] = un_idx
+    if sc3.button("☐ Deseleziona tutti", use_container_width=True, key="_sel_none"):
+        st.session_state["_force_sel"] = []
 
-# Conta prodotti non-arricchiti per mostrare target corretto
-if skip_already_enriched and "_enrichment_status" in df.columns:
-    _status_lower = df["_enrichment_status"].astype(str).str.strip().str.lower()
-    _n_enriched = int(_status_lower.isin(["ok", "cached"]).sum())
-    _n_unenriched = len(df) - _n_enriched
-    if _n_enriched > 0:
-        st.info(
-            f"📌 Catalogo: **{_n_enriched}** già arricchiti (preservati) · "
-            f"**{_n_unenriched}** da arricchire. Limit applicato solo sui prodotti da arricchire."
-        )
+    forced = st.session_state.get("_force_sel")
+    if forced is not None:
+        display_df["✔ Seleziona"] = display_df.index.isin(forced)
+        st.session_state["_force_sel"] = None
 
-if sector == "auto":
-    with st.expander("🔎 Anteprima classificazione automatica", expanded=True):
-        from utils import sector_classifier
-        preview_df = df.head(limit) if limit else df
-        with st.spinner(f"Classifico {len(preview_df)} prodotti..."):
-            summary = sector_classifier.summarize(preview_df)
-        st.caption(
-            "Ogni prodotto riceverà le regole del settore rilevato. "
-            "I prodotti non classificati (nessun match) useranno il prompt generico."
-        )
-        st.dataframe(summary, use_container_width=True, height=min(40 + len(summary) * 38, 320),
-                      column_config={
-                          "_sector_detected": st.column_config.TextColumn("Settore rilevato", width="medium"),
-                          "_sector_confidence": st.column_config.TextColumn("Confidence"),
-                          "count": st.column_config.NumberColumn("Prodotti", width="small"),
-                      })
-        # Quick sample table
-        full_detect = sector_classifier.classify_dataframe(preview_df.head(20))
-        st.caption("**Esempio prime 20 righe:**")
-        st.dataframe(
-            full_detect[[c for c in ("id", "title", "_sector_detected", "_sector_confidence")
-                         if c in full_detect.columns]].rename(columns={
-                "_sector_detected": "settore",
-                "_sector_confidence": "conf.",
-            }),
-            use_container_width=True, height=260,
-        )
+    edited = st.data_editor(
+        display_df,
+        use_container_width=True, height=380, hide_index=True,
+        column_config={
+            "✔ Seleziona": st.column_config.CheckboxColumn(width="small", pinned=True),
+            "id": st.column_config.TextColumn(width="medium"),
+            "title": st.column_config.TextColumn(width="large"),
+            "brand": st.column_config.TextColumn(width="small"),
+            "price": st.column_config.TextColumn(width="small"),
+            "Stato": st.column_config.TextColumn(width="small",
+                        help="🟢/🔵 arricchito · 🔴 errore · ⚪ non arricchito"),
+        },
+        disabled=[c for c in display_df.columns if c != "✔ Seleziona"],
+        key="_edit_selection",
+    )
+    selected_indices = edited.index[edited["✔ Seleziona"]].tolist()
 
-# ============================================================
-# STYLE GUIDE — coerenza cross-prodotto (1 call Haiku upfront)
-# ============================================================
-from utils import catalog_style
-
-_style_ns = f"session_{st.session_state.get('session_id', 'default')}"
-existing_guide = catalog_style.load_guide(_style_ns)
-
-sgc1, sgc2, sgc3 = st.columns([2, 2, 1])
-use_style_guide = sgc1.checkbox(
-    "🧭 Usa style guide catalogo (coerenza cross-prodotto)",
-    value=bool(existing_guide),
-    help=(
-        "Analizza un campione del catalogo con Claude Haiku (~€0.01) ed estrae:\n"
-        "- Formula titolo uniforme\n"
-        "- Tono voce\n"
-        "- Pattern tassonomia\n"
-        "- Vocabolario preferito e vietato\n\n"
-        "Lo style guide viene iniettato nel system prompt di OGNI enrichment "
-        "successivo. Risultato: 100 prodotti con output coerente come da un "
-        "singolo prompt, non isolati. La guide resta cachata — zero overhead per chiamata."
-    ),
-)
-style_guide_text = ""
-if use_style_guide:
-    if sgc2.button("Genera / rigenera style guide", use_container_width=True,
-                    disabled=not st.session_state.get("api_key")):
-        with st.spinner("Analisi campione catalogo..."):
-            new_guide = catalog_style.analyze_catalog(
-                df, st.session_state["api_key"], sample_size=12
-            )
-        if new_guide and "_error" not in new_guide:
-            catalog_style.save_guide(_style_ns, new_guide)
-            existing_guide = new_guide
-            st.toast("Style guide generato", icon="🧭")
-            st.rerun()
-        else:
-            st.error(f"Errore generazione: {new_guide.get('_error', '?')}")
-    if existing_guide:
-        style_guide_text = catalog_style.format_for_prompt(existing_guide)
-        sgc3.metric("Token guide", len(style_guide_text) // 3)
-        with st.expander("Anteprima style guide"):
-            st.json(existing_guide)
-
-if sector and sector != "auto":
-    with st.expander(f"📚 Best practice attive: {sector}"):
-        s = load_sector(sector)
-        if s.get("title", {}).get("formula"):
-            st.markdown(f"**Formula titolo**: `{s['title']['formula']}`")
-        if examples := s.get("title", {}).get("formula_examples"):
-            st.markdown("**Esempi**: " + "  \n• ".join([""] + examples))
-        if forb := s.get("title", {}).get("forbidden_words"):
-            st.markdown(f"**Parole vietate**: {', '.join(forb)}")
-        st.caption(f"Editabile in `config/sectors/{sector}.yaml`")
-
-# Base subset: esclude i già-arricchiti quando skip_already_enriched attivo
-if skip_already_enriched and "_enrichment_status" in df.columns:
-    _mask_un = ~df["_enrichment_status"].astype(str).str.strip().str.lower().isin(["ok", "cached"])
-    _base = df[_mask_un]
-else:
-    _base = df
-n_to_process = min(limit, len(_base)) if limit else len(_base)
-
-# Cache hit preview
-use_cache = st.checkbox(
-    "Usa cache (riusa enrichment precedenti per prodotti invariati)",
-    value=True,
-    help="Risparmia fino al 90% dei costi AI quando aggiorni un feed già processato. "
-         "Il match avviene su hash di id, title, description, brand, prezzo, attributi.",
-)
-
-cache_ns = f"{st.session_state.get('session_id','default')}__{sector or 'generic'}"
-cached_rows: dict = {}
-if use_cache:
-    try:
-        preview_subset = _base.head(n_to_process) if limit else _base
-        cached_rows, _ = enrich_cache.get_cached(
-            preview_subset,
-            namespace="shared_v1",
-            model=model, sector=sector, provider="anthropic",
-        )
-    except Exception:
-        cached_rows = {}
-
-n_hit = len(cached_rows)
-n_miss = n_to_process - n_hit
-
-hit_rate_color = "#10B981" if n_hit > 0 else "#9CA3AF"
-st.markdown(
-    f"<div style='display:flex; gap:16px; font-size:0.82rem; color:#4B5563; margin:6px 0 12px;'>"
-    f"<span><span style='color:{hit_rate_color};'>●</span>&nbsp;Cache hit: <b>{n_hit}</b></span>"
-    f"<span><span style='color:#2F6FED;'>●</span>&nbsp;Da processare con AI: <b>{n_miss}</b></span>"
-    f"</div>",
-    unsafe_allow_html=True,
-)
-
-# Cost estimate — based only on miss (cache skips AI call)
-cost_estimate_card(n_miss, model)
-
-with st.expander(f"💰 Confronta tutti i modelli su {n_miss:,} prodotti", expanded=False):
-    cost_projection_table(n_miss)
-    st.markdown(
-        "**Strategie per risparmiare ancora:**\n"
-        "- **Cache hash prodotto** (già attivo): re-enrichment dopo update feed = 70-95% dei prodotti in cache\n"
-        "- **Delta sync** (pagina Clienti): enrichment SOLO sui prodotti nuovi/modificati nel feed\n"
-        "- **Batch API 24h**: sconto 50% su input+output, ideale per cron notturno cataloghi grandi\n"
-        "- **Modello ibrido**: Haiku/gpt-4o-mini per bulk + Sonnet/gpt-5 solo per prodotti flaggati a bassa qualità\n"
-        "- **Limite prodotti**: testa prima con limit=10-50 per validare settore e prompt template"
+    sc4.markdown(
+        f"<div style='background:#EEF4FF; border:1px solid #DCE7FE; border-radius:10px; "
+        f"padding:10px 14px; font-weight:600; color:#2F6FED; text-align:center;'>"
+        f"✨ {len(selected_indices):,} selezionati · {len(filtered):,} visibili"
+        f"</div>",
+        unsafe_allow_html=True,
     )
 
-bcol1, bcol2 = st.columns([2, 1])
-launch = bcol1.button("Avvia enrichment", type="primary", use_container_width=True)
-if bcol2.button("Pulisci cache", use_container_width=True,
-                help="Forza re-enrichment di tutto il feed al prossimo run"):
+# ============================================================
+# OPZIONI AVANZATE
+# ============================================================
+with st.expander("⚙️ Opzioni avanzate (modello, settore, target)", expanded=False):
+    ac1, ac2, ac3 = st.columns(3)
+    _ALL_MODELS = [
+        "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
+        "claude-haiku-3-5", "gpt-5", "gpt-5-mini", "gpt-5-nano",
+        "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini",
+        "o3", "o3-mini", "o4-mini",
+    ]
+    model = ac1.selectbox("Modello AI", _ALL_MODELS,
+                           index=_ALL_MODELS.index("claude-sonnet-4-6"),
+                           help="Default Sonnet 4.6. Economia: Haiku / gpt-4.1-nano.")
+
+    sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
+    default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
+    sector_choice = ac2.selectbox("Settore best practice", sectors, index=default_idx)
+    sector = "" if sector_choice == "(generico)" else \
+             ("auto" if sector_choice.startswith("✨ auto") else sector_choice)
+
+    target_choice = ac3.radio(
+        "Target", options=["both", "google", "meta"],
+        format_func=lambda v: {"both": "🛒📘 Entrambi",
+                                 "google": "🛒 Solo Google",
+                                 "meta": "📘 Solo Meta"}[v],
+        horizontal=True,
+    )
+
+    ac4, ac5, ac6 = st.columns(3)
+    workers = ac4.slider("Parallelismo", 1, 15, 5,
+                          help="Chiamate API simultanee. 5 = sweet spot.")
+    overwrite = ac5.checkbox("Sovrascrivi title/description", value=True,
+                              help="Originali salvati in title_original/description_original.")
+    use_cache = ac6.checkbox("Usa cache hash", value=True,
+                               help="Riusa enrichment invariato (hash contenuto prodotto).")
+
+    # Style guide
+    from utils import catalog_style
+    _style_ns = f"session_{st.session_state.get('session_id', 'default')}"
+    existing_guide = catalog_style.load_guide(_style_ns)
+    sg1, sg2 = st.columns([2, 1])
+    use_style_guide = sg1.checkbox(
+        "🧭 Style guide catalogo (coerenza cross-prodotto)",
+        value=bool(existing_guide),
+        help="Analizza campione catalogo → estrae formula titolo / tono / vocabolario. "
+             "Iniettato in ogni prompt. ~€0.01 una volta.",
+    )
+    style_guide_text = ""
+    if use_style_guide:
+        if sg2.button("Genera / rigenera", use_container_width=True,
+                        disabled=not st.session_state.get("api_key")):
+            with st.spinner("Analisi campione..."):
+                new_g = catalog_style.analyze_catalog(df, st.session_state["api_key"], sample_size=12)
+            if new_g and "_error" not in new_g:
+                catalog_style.save_guide(_style_ns, new_g)
+                st.toast("Style guide generato", icon="🧭")
+                st.rerun()
+            else:
+                st.error(f"Errore: {new_g.get('_error', '?')}")
+        if existing_guide:
+            style_guide_text = catalog_style.format_for_prompt(existing_guide)
+            st.caption(f"Guide attivo · ~{len(style_guide_text)//3} token")
+
+    if sector and sector != "auto":
+        with st.expander(f"📚 Best practice {sector}"):
+            s = load_sector(sector)
+            if s.get("title", {}).get("formula"):
+                st.markdown(f"**Formula titolo**: `{s['title']['formula']}`")
+            if forb := s.get("title", {}).get("forbidden_words"):
+                st.markdown(f"**Vietate**: {', '.join(forb)}")
+
+# ============================================================
+# CACHE + STIMA COSTO
+# ============================================================
+n_selected = len(selected_indices)
+cached_rows: dict = {}
+n_hit = 0
+n_miss = n_selected
+if n_selected > 0 and use_cache:
+    try:
+        cached_rows, _ = enrich_cache.get_cached(
+            df.loc[selected_indices], namespace="shared_v1",
+            model=model, sector=sector, provider="anthropic",
+        )
+        n_hit = len(cached_rows)
+        n_miss = n_selected - n_hit
+    except Exception:
+        pass
+
+if n_selected > 0:
+    pc1, pc2, pc3 = st.columns(3)
+    pc1.metric("Selezionati", n_selected)
+    pc2.metric("🔵 Cache hit (gratis)", n_hit)
+    pc3.metric("🟢 Da processare AI", n_miss)
+    cost_estimate_card(n_miss, model)
+    with st.expander(f"💰 Confronta tutti i modelli su {n_miss:,} prodotti"):
+        cost_projection_table(n_miss)
+
+# ============================================================
+# LAUNCH
+# ============================================================
+st.divider()
+lc1, lc2 = st.columns([4, 1])
+launch = lc1.button(
+    f"🚀 Avvia enrichment su {n_selected:,} prodotti",
+    type="primary", use_container_width=True,
+    disabled=(n_selected == 0),
+)
+if lc2.button("🧹 Pulisci cache", use_container_width=True,
+                help="Rimuove tutti i risultati cached — forza re-enrichment."):
     enrich_cache.clear("shared_v1")
-    st.success("Cache pulita")
+    st.toast("Cache pulita", icon="🧹")
     st.rerun()
 
 if launch:
     with guarded("enrichment AI"):
-        if n_miss == 0 and n_hit > 0:
-            # Tutto in cache — ricostruisci direttamente
-            enriched_rows = df.head(n_to_process).copy() if limit else df.copy()
+        selected_df = df.loc[selected_indices].copy()
+
+        with LoadingProgress("Enrichment AI in corso", total=n_miss or n_selected) as lp:
+            def cb(d, t):
+                lp.update(d, subtitle=f"{d}/{t} prodotti processati")
+            enriched_subset = enrich_dataframe(
+                selected_df, api_key=st.session_state["api_key"], model=model,
+                max_workers=workers, limit=None, progress_callback=cb,
+                sector=sector, overwrite_title_description=overwrite,
+                max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 3500)),
+                style_guide_text=style_guide_text,
+                skip_already_enriched=False,
+                target=target_choice,
+            )
+
+        if use_cache and "_enrichment_status" in enriched_subset.columns:
+            try:
+                good = enriched_subset[enriched_subset["_enrichment_status"] == "ok"]
+                pairs = []
+                for idx, row in good.iterrows():
+                    src = selected_df.loc[idx].to_dict() if idx in selected_df.index else row.to_dict()
+                    result = {k: row.get(k) for k in row.index
+                              if k not in ("_enrichment_status",) and pd.notna(row.get(k))}
+                    pairs.append((src, result))
+                enrich_cache.store(pairs, namespace="shared_v1",
+                                     model=model, sector=sector, provider="anthropic")
+            except Exception:
+                pass
+
+        if cached_rows:
             for idx, result in cached_rows.items():
-                for k, v in (result or {}).items():
-                    if v is not None:
-                        enriched_rows.at[idx, k] = v
-            enriched_rows["_enrichment_status"] = "cached"
-            st.session_state["enriched_df"] = enriched_rows
-        else:
-            with LoadingProgress("Enrichment AI in corso", total=n_miss or n_to_process) as lp:
-                def cb(d, t):
-                    lp.update(d, subtitle=f"{d}/{t} prodotti processati")
+                if idx in enriched_subset.index:
+                    for k, v in (result or {}).items():
+                        if v is not None:
+                            enriched_subset.at[idx, k] = v
+                    enriched_subset.at[idx, "_enrichment_status"] = "cached"
 
-                enriched = enrich_dataframe(
-                    df, api_key=st.session_state["api_key"], model=model,
-                    max_workers=workers, limit=limit or None, progress_callback=cb,
-                    sector=sector, overwrite_title_description=overwrite,
-                    max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 3500)),
-                    style_guide_text=style_guide_text,
-                    skip_already_enriched=skip_already_enriched,
-                    target=target_choice,
-                )
+        # Merge subset nel df principale
+        for col in enriched_subset.columns:
+            if col not in df.columns:
+                df[col] = ""
+            df.loc[enriched_subset.index, col] = enriched_subset[col]
 
-            # Salva i risultati OK in cache per riuso futuro
-            if use_cache and "_enrichment_status" in enriched.columns:
-                try:
-                    good = enriched[enriched["_enrichment_status"] == "ok"]
-                    pairs = []
-                    for idx, row in good.iterrows():
-                        src = df.loc[idx].to_dict() if idx in df.index else row.to_dict()
-                        result = {k: row.get(k) for k in row.index
-                                  if k not in ("_enrichment_status",) and pd.notna(row.get(k))}
-                        pairs.append((src, result))
-                    enrich_cache.store(pairs, namespace="shared_v1",
-                                       model=model, sector=sector, provider="anthropic")
-                except Exception:
-                    pass
-
-            # Ripristina risultati cache nelle righe saltate
-            if cached_rows:
-                for idx, result in cached_rows.items():
-                    if idx in enriched.index:
-                        for k, v in (result or {}).items():
-                            if v is not None:
-                                enriched.at[idx, k] = v
-                        enriched.at[idx, "_enrichment_status"] = "cached"
-
-            st.session_state["enriched_df"] = enriched
+        st.session_state["feed_df"] = df
+        st.session_state["enriched_df"] = df
         st.session_state["merged_df"] = None
         from utils.history import save_snapshot
         save_snapshot(st.session_state["session_id"], st.session_state)
 
-        # If driven from a Client feed (Clienti page handoff), remove enriched
-        # keys from the pending queue and merge into that feed's cumulative
-        # enriched.parquet so subsequent syncs know they're done.
+        # Hook client integration
         client_slug = st.session_state.get("_enrich_client_slug")
         feed_slug = st.session_state.get("_enrich_feed_slug")
         if client_slug and feed_slug:
             try:
                 from utils import clients as _cs
                 from utils import feed_diff as _fd
-                final = st.session_state.get("enriched_df")
-                if final is not None and not final.empty:
-                    strat = (_cs.get_feed(client_slug, feed_slug) or {}).get("id_strategy", "hierarchical")
-                    enriched_keys = [
-                        _fd.product_key(r.to_dict(), strategy=strat)
-                        for _, r in final.iterrows()
-                    ]
-                    removed_cnt = _cs.remove_pending(client_slug, feed_slug, enriched_keys)
-                    # Merge into cumulative enriched
-                    prev = _cs.load_enriched(client_slug, feed_slug)
-                    if prev is None or prev.empty:
-                        merged = final.copy()
-                    else:
-                        # Drop overlapping keys from prev then concat
-                        prev_keys = [
-                            _fd.product_key(r.to_dict(), strategy=strat)
-                            for _, r in prev.iterrows()
-                        ]
-                        mask = [k not in enriched_keys for k in prev_keys]
-                        merged = pd.concat([prev[mask], final], ignore_index=True)
-                    _cs.save_enriched(client_slug, feed_slug, merged)
-                    _cs.log_event(client_slug, feed_slug, "enrichment_applied",
-                                  {"enriched": int(len(final)), "removed_from_pending": removed_cnt})
-                    st.info(f"💼 {removed_cnt} prodotti rimossi dalla coda · "
-                            f"enriched.parquet del feed aggiornato")
-            except Exception as _e:  # noqa
-                st.warning(f"Hook client-feed non riuscito (non critico): {_e}")
+                strat = (_cs.get_feed(client_slug, feed_slug) or {}).get("id_strategy", "hierarchical")
+                enriched_keys = [_fd.product_key(r.to_dict(), strategy=strat)
+                                  for _, r in df.iterrows()]
+                _cs.remove_pending(client_slug, feed_slug, enriched_keys)
+                _cs.save_enriched(client_slug, feed_slug, df)
+            except Exception:
+                pass
 
-        st.success(f"Enrichment completato · {n_hit} da cache, {n_miss} elaborati")
+        st.success(f"✅ Completato · {n_hit} da cache, {n_miss} elaborati AI")
+        st.rerun()
+
+st.divider()
 
 enriched = st.session_state.get("enriched_df")
 if enriched is None:
