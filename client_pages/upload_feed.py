@@ -103,14 +103,18 @@ with tabs[tab_ex_idx]:
                          if s in p.get("name", "").lower()
                          or s in p.get("description", "").lower()]
 
+        from utils.history import delete_session, remove_project_meta
+
         for p in filtered[:20]:
+            confirm_key = f"_confirm_del_proj_{p['id']}"
             with st.container():
-                c = st.columns([4, 1])
+                c = st.columns([4, 1, 1])
                 c[0].markdown(f"**{p['name']}**")
                 info_bits = [f"{p['events']} eventi", f"{p['files']} file"]
                 if p.get("description"):
                     c[0].caption(p["description"])
                 c[0].caption(" · ".join(info_bits) + f" · ultimo accesso: {p.get('last_opened', '—')}")
+
                 if c[1].button("▶ Apri", key=f"open_{p['id']}", type="primary",
                                 use_container_width=True):
                     for k in ("feed_df", "merged_df", "enriched_df", "gads_df", "raw_df", "labels"):
@@ -121,6 +125,34 @@ with tabs[tab_ex_idx]:
                     st.session_state.pop("_replace_mode", None)
                     st.success(f"Aperto: **{p['name']}**")
                     st.rerun()
+
+                if c[2].button("🗑️", key=f"del_{p['id']}", use_container_width=True,
+                                help="Elimina progetto (irreversibile)"):
+                    st.session_state[confirm_key] = True
+
+                if st.session_state.get(confirm_key):
+                    st.warning(
+                        f"Eliminare **{p['name']}** ({p['events']} eventi, {p['files']} file)? "
+                        "L'operazione è permanente: cancella la sessione, la history e tutti gli output."
+                    )
+                    cc1, cc2 = st.columns(2)
+                    if cc1.button("✓ Conferma eliminazione", type="primary",
+                                   key=f"del_ok_{p['id']}", use_container_width=True):
+                        try:
+                            delete_session(p["id"])
+                        except Exception:
+                            pass
+                        try:
+                            remove_project_meta(p["id"])
+                        except Exception:
+                            pass
+                        st.session_state.pop(confirm_key, None)
+                        st.toast(f"Eliminato: {p['name']}", icon="🗑️")
+                        st.rerun()
+                    if cc2.button("Annulla", key=f"del_no_{p['id']}",
+                                    use_container_width=True):
+                        st.session_state.pop(confirm_key, None)
+                        st.rerun()
 
 # Se non c'è ancora un progetto nominato, non proseguire
 if not get_project_info(st.session_state["session_id"]) and not st.session_state.get("_replace_mode"):

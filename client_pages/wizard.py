@@ -271,11 +271,24 @@ if step == 1:
             if not projects:
                 st.info("Nessun progetto salvato.")
             else:
+                from utils.history import delete_session, remove_project_meta
+
+                search = st.text_input("Cerca progetto", placeholder="Nome o descrizione...",
+                                        key="wiz_proj_search")
+                if search:
+                    s_low = search.lower()
+                    projects = [p for p in projects
+                                 if s_low in p.get("name", "").lower()
+                                 or s_low in p.get("description", "").lower()]
+
                 for p in projects[:15]:
-                    c = st.columns([4, 1])
+                    confirm_key = f"_confirm_wdel_{p['id']}"
+                    c = st.columns([4, 1, 1])
                     c[0].markdown(f"**{p['name']}**")
-                    if p.get("description"): c[0].caption(p["description"])
+                    if p.get("description"):
+                        c[0].caption(p["description"])
                     c[0].caption(f"{p['events']} eventi · ultimo accesso: {p.get('last_opened', '—')}")
+
                     if c[1].button("▶ Apri", key=f"wo_{p['id']}", type="primary",
                                     use_container_width=True):
                         for k in ("feed_df", "merged_df", "enriched_df", "gads_df", "raw_df", "labels"):
@@ -283,6 +296,30 @@ if step == 1:
                         restore_snapshot(p["id"], st.session_state)
                         touch_project(p["id"])
                         go(2)
+
+                    if c[2].button("🗑️", key=f"wdel_{p['id']}", use_container_width=True,
+                                    help="Elimina progetto (irreversibile)"):
+                        st.session_state[confirm_key] = True
+
+                    if st.session_state.get(confirm_key):
+                        st.warning(
+                            f"Eliminare **{p['name']}** ({p['events']} eventi)? "
+                            "Cancellazione permanente."
+                        )
+                        cc1, cc2 = st.columns(2)
+                        if cc1.button("✓ Conferma", type="primary",
+                                       key=f"wdel_ok_{p['id']}", use_container_width=True):
+                            try: delete_session(p["id"])
+                            except Exception: pass
+                            try: remove_project_meta(p["id"])
+                            except Exception: pass
+                            st.session_state.pop(confirm_key, None)
+                            st.toast(f"Eliminato: {p['name']}", icon="🗑️")
+                            st.rerun()
+                        if cc2.button("Annulla", key=f"wdel_no_{p['id']}",
+                                       use_container_width=True):
+                            st.session_state.pop(confirm_key, None)
+                            st.rerun()
 
 
 # ============================================================
