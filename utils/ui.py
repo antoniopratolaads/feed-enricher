@@ -865,28 +865,66 @@ _PRICES = {
 
 
 def estimate_cost(n_rows: int, model: str,
-                  tokens_in_per_row: int = 250, tokens_out_per_row: int = 180) -> dict:
-    """Rough cost estimate for enrichment of N rows with given model.
+                  tokens_in_per_row: int = 350,
+                  tokens_out_per_row: int = 1800,
+                  system_prompt_tokens: int = 5200,
+                  use_cache: bool = True) -> dict:
+    """Cost estimate for enrichment of N rows with given model.
 
-    Defaults assume a compact product context (title, brand, price, ~8 fields)
-    and an enriched output with title + description + classification.
+    Defaults aggiornati al schema GMC+Meta esteso (80+ attributi, product_detail
+    8-20 entries, product_highlight 6-10 bullets, rich_text_description HTML):
+      - output medio 1800 token (range realistico 1500-2500, max 3500)
+      - input payload prodotto 350 token
+      - system prompt 5200 token (base + schema + sector brief)
+      - prompt caching Anthropic: prima call scrive cache (+25% costo),
+        successive leggono cache a 10% del prezzo input
 
-    Returns: dict(input_usd, output_usd, total_usd, total_eur, total_tokens_in, total_tokens_out)
+    Returns: dict con input/output/cache/total USD + EUR + token counts
     """
     p = _PRICES.get(model, _PRICES["claude-sonnet-4-6"])
-    total_in = n_rows * tokens_in_per_row
+
+    # Output costo lineare
     total_out = n_rows * tokens_out_per_row
-    usd_in = total_in / 1_000_000 * p["input"]
     usd_out = total_out / 1_000_000 * p["output"]
+
+    # Input: con caching il system prompt viene scritto una volta, letto N-1 volte
+    # cache write = 1.25x input, cache read = 0.10x input (politica Anthropic)
+    user_content_tokens = n_rows * tokens_in_per_row
+
+    if use_cache and n_rows > 1:
+        # Prima call paga pieno input + cache write (+25% sui token cached)
+        first_call_in = system_prompt_tokens + tokens_in_per_row
+        first_call_cache_write = system_prompt_tokens * 0.25  # surcharge
+        # Resto delle call: user content pieno + cache read (10% prezzo su system)
+        remaining_user = (n_rows - 1) * tokens_in_per_row
+        cache_read_tokens = (n_rows - 1) * system_prompt_tokens
+        usd_in = (
+            (first_call_in + first_call_cache_write + remaining_user)
+            / 1_000_000 * p["input"]
+            + cache_read_tokens / 1_000_000 * p["input"] * 0.10
+        )
+        total_in_equivalent = int(
+            first_call_in + first_call_cache_write + remaining_user + cache_read_tokens
+        )
+    else:
+        # Senza caching: paga system prompt per ogni call
+        total_in_tokens = n_rows * (system_prompt_tokens + tokens_in_per_row)
+        usd_in = total_in_tokens / 1_000_000 * p["input"]
+        total_in_equivalent = total_in_tokens
+
     total_usd = usd_in + usd_out
-    eur = total_usd * 0.93  # rough EUR/USD 2026
+    eur = total_usd * 0.93  # EUR/USD 2026
+
     return {
         "input_usd": usd_in,
         "output_usd": usd_out,
         "total_usd": total_usd,
         "total_eur": eur,
-        "tokens_in": total_in,
+        "tokens_in": total_in_equivalent,
         "tokens_out": total_out,
+        "tokens_per_row_out": tokens_out_per_row,
+        "tokens_per_row_in": tokens_in_per_row,
+        "use_cache": use_cache,
     }
 
 
@@ -894,24 +932,38 @@ def cost_estimate_card(n_rows: int, model: str):
     """Display a compact cost estimate card before launching enrichment."""
     if n_rows <= 0:
         return
-    est = estimate_cost(n_rows, model)
-    tone_color = "#10B981" if est["total_eur"] < 2 else ("#F59E0B" if est["total_eur"] < 10 else "#EF4444")
+    est_cached = estimate_cost(n_rows, model, use_cache=True)
+    est_nocache = estimate_cost(n_rows, model, use_cache=False)
+    savings_eur = est_nocache["total_eur"] - est_cached["total_eur"]
+    savings_pct = int(savings_eur / est_nocache["total_eur"] * 100) if est_nocache["total_eur"] else 0
+
+    tone_color = (
+        "#10B981" if est_cached["total_eur"] < 5
+        else ("#F59E0B" if est_cached["total_eur"] < 30 else "#EF4444")
+    )
     st.markdown(
         f"""
         <div style='background:#F9FAFB; border:1px solid #E5E7EB; border-radius:12px;
-                    padding:14px 18px; margin:8px 0;'>
-            <div style='display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;'>
+                    padding:16px 20px; margin:8px 0;'>
+            <div style='display:flex; justify-content:space-between; align-items:flex-start; gap:20px; flex-wrap:wrap;'>
                 <div>
-                    <div style='font-size:0.75rem; color:#6B7280; text-transform:uppercase; letter-spacing:0.05em;'>
-                        Stima costo {model}
+                    <div style='font-size:0.72rem; color:#6B7280; text-transform:uppercase;
+                                letter-spacing:0.08em; font-weight:600; margin-bottom:4px;'>
+                        Stima costo · {model}
                     </div>
-                    <div style='font-size:1.5rem; font-weight:700; color:{tone_color};'>
-                        ~ €{est['total_eur']:.2f}
+                    <div style='font-size:1.75rem; font-weight:800; color:{tone_color};
+                                letter-spacing:-0.02em; line-height:1;'>
+                        ~ €{est_cached['total_eur']:.2f}
+                    </div>
+                    <div style='font-size:0.72rem; color:#10B981; margin-top:4px; font-weight:600;'>
+                        prompt caching attivo · risparmi €{savings_eur:.2f} ({savings_pct}%)
                     </div>
                 </div>
-                <div style='font-size:0.78rem; color:#6B7280; line-height:1.6;'>
-                    {n_rows:,} prodotti · {est['tokens_in']:,} tok in · {est['tokens_out']:,} tok out<br>
-                    ${est['total_usd']:.3f} USD totali ({model})
+                <div style='font-size:0.76rem; color:#4B5563; line-height:1.65; text-align:right;'>
+                    <b>{n_rows:,}</b> prodotti<br>
+                    <b>~{est_cached['tokens_per_row_in']}</b> tok input/riga<br>
+                    <b>~{est_cached['tokens_per_row_out']}</b> tok output/riga<br>
+                    ${est_cached['total_usd']:.2f} USD totali
                 </div>
             </div>
         </div>
