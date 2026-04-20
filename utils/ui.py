@@ -140,27 +140,10 @@ p, .stMarkdown { color: var(--text-primary); line-height: 1.6; }
 /* ============================================================
    SIDEBAR
    ============================================================ */
-/* Specificità alta per battere emotion CSS: #root + tag + attribute */
-#root section[data-testid="stSidebar"],
-#root section.stSidebar,
-html body section[data-testid="stSidebar"],
-html body section[data-testid="stSidebar"][aria-expanded="false"],
-html body section[data-testid="stSidebar"][aria-expanded="true"] {
-    background: #FFFFFF !important;
-    border-right: 1px solid #E5E7EB !important;
-    padding-top: 0.5rem !important;
-    min-width: 244px !important;
-    max-width: 340px !important;
-    width: 300px !important;
-    transform: translateX(0) !important;
-    position: relative !important;
-    left: 0 !important;
-    top: 0 !important;
-    visibility: visible !important;
-    display: block !important;
-    opacity: 1 !important;
-    z-index: 10 !important;
-    flex: 0 0 300px !important;
+[data-testid="stSidebar"] {
+    background: var(--bg-elevated) !important;
+    border-right: 1px solid var(--border) !important;
+    padding-top: 0.5rem;
 }
 /* Rendi il toggle button non necessario (nascondiamo per evitare confusione) */
 [data-testid="stBaseButton-headerNoPadding"] {
@@ -657,36 +640,23 @@ pre code {
 
 _SIDEBAR_FORCE_OPEN_JS = """
 <script>
-(function ensureSidebarOpen() {
-    const doc = (window.parent && window.parent.document) || document;
-    function forceStyles(sb) {
-        sb.style.setProperty('min-width', '244px', 'important');
-        sb.style.setProperty('max-width', '340px', 'important');
-        sb.style.setProperty('width', '300px', 'important');
-        sb.style.setProperty('transform', 'translateX(0)', 'important');
-        sb.style.setProperty('visibility', 'visible', 'important');
-        sb.style.setProperty('display', 'block', 'important');
-        sb.style.setProperty('opacity', '1', 'important');
-        sb.style.setProperty('flex', '0 0 300px', 'important');
-    }
-    function apply() {
-        const sb = doc.querySelector('[data-testid="stSidebar"]');
-        if (!sb) return false;
-        forceStyles(sb);
-        return true;
-    }
-    // Apply ogni 200ms per 15s — cattura anche re-render Streamlit
-    let tries = 0;
-    const iv = setInterval(() => {
-        apply();
-        if (++tries > 75) clearInterval(iv);
-    }, 200);
-    // MutationObserver permanente — riapplica se Streamlit cambia stile sidebar
+(function resetSidebarState() {
+    const win = window.parent || window;
     try {
-        const obs = new MutationObserver(() => apply());
-        obs.observe(doc.body, {subtree: true, childList: true, attributes: true,
-                               attributeFilter: ['style', 'aria-expanded']});
-    } catch (_) {}
+        const ls = win.localStorage;
+        // Streamlit memorizza 'stSidebarCollapsed-' in localStorage.
+        // Se e' 'true' (collapsed), cancella e ricarica per aprire sidebar.
+        const key = 'stSidebarCollapsed-';
+        const value = ls.getItem(key);
+        if (value && value.toLowerCase() === 'true') {
+            ls.removeItem(key);
+            // Reload una volta per applicare
+            if (!win.sessionStorage.getItem('_sidebar_reset')) {
+                win.sessionStorage.setItem('_sidebar_reset', '1');
+                win.location.reload();
+            }
+        }
+    } catch(e) {}
 })();
 </script>
 """
