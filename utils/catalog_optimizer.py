@@ -117,12 +117,102 @@ GOOGLE_FIELDS = [
     ("custom_label_4",                ["custom_label_4"],               False, False),
 ]
 
-# Meta-specific aggiuntivi (oltre a quelli sopra)
+# ============================================================
+# META CATALOG — specifica campi ufficiali
+# ============================================================
+# (target_col, [source_cols priority order], required_for_meta)
+# I nomi sono ESATTAMENTE quelli della spec Meta Commerce Manager.
+# Riferimento: facebook.com/business/help/120325381656392
+META_FIELDS = [
+    # Identificativi & richiesti
+    ("id",                        ["id"],                                True),
+    ("title",                     ["title_meta", "title"],               True),
+    ("description",               ["description"],                       True),
+    ("availability",              ["availability"],                      True),
+    ("condition",                 ["condition"],                         True),
+    ("price",                     ["price"],                             True),
+    ("link",                      ["link"],                              True),
+    ("image_link",                ["image_link"],                        True),
+    ("brand",                     ["brand"],                             True),
+
+    # Immagini & media
+    ("additional_image_link",     ["additional_image_link"],             False),
+    ("video",                     ["video"],                             False),
+
+    # Varianti & grouping
+    ("item_group_id",             ["item_group_id"],                     False),
+
+    # Prezzi
+    ("sale_price",                ["sale_price"],                        False),
+    ("sale_price_effective_date", ["sale_price_effective_date"],         False),
+    ("unit_price",                ["unit_pricing_measure", "unit_pricing_base_measure"], False),
+
+    # Descriptions aggiuntive (Meta-specific)
+    ("short_description",         ["short_description",
+                                    "description_meta_short"],           False),
+    ("rich_text_description",     ["rich_text_description"],             False),
+
+    # Tassonomia
+    ("fb_product_category",       ["fb_product_category",
+                                    "google_product_category"],          False),
+    ("google_product_category",   ["google_product_category"],           False),
+    ("product_type",              ["product_type"],                      False),
+
+    # Identità
+    ("gtin",                      ["gtin"],                              False),
+    ("mpn",                       ["mpn"],                               False),
+
+    # Attributi prodotto
+    ("color",                     ["color"],                             False),
+    ("size",                      ["size"],                              False),
+    ("material",                  ["material"],                          False),
+    ("pattern",                   ["pattern"],                           False),
+    ("gender",                    ["gender"],                            False),
+    ("age_group",                 ["age_group"],                         False),
+
+    # Inventario
+    ("inventory",                 ["quantity", "inventory"],             False),
+    ("quantity_to_sell_on_facebook", ["quantity"],                       False),
+
+    # Disponibilità temporale
+    ("availability_date",         ["availability_date"],                 False),
+    ("expiration_date",           ["expiration_date"],                   False),
+
+    # Spedizione & origine
+    ("shipping_weight",           ["shipping_weight"],                   False),
+    ("origin_country",            ["origin_country", "ships_from_country"], False),
+
+    # Compliance EU GPSR (produttore & importatore)
+    ("manufacturer_info",         ["manufacturer_info"],                 False),
+    ("manufacturer_part_number",  ["mpn"],                               False),
+    ("importer_name",             ["importer_name"],                     False),
+    ("importer_address",          ["importer_address"],                  False),
+
+    # Tasse Meta Commerce
+    ("commerce_tax_category",     ["commerce_tax_category"],             False),
+
+    # Custom labels & numbers
+    ("custom_label_0",            ["custom_label_0"],                    False),
+    ("custom_label_1",            ["custom_label_1"],                    False),
+    ("custom_label_2",            ["custom_label_2"],                    False),
+    ("custom_label_3",            ["custom_label_3"],                    False),
+    ("custom_label_4",            ["custom_label_4"],                    False),
+    ("custom_number_0",           ["custom_number_0"],                   False),
+    ("custom_number_1",           ["custom_number_1"],                   False),
+    ("custom_number_2",           ["custom_number_2"],                   False),
+    ("custom_number_3",           ["custom_number_3"],                   False),
+    ("custom_number_4",           ["custom_number_4"],                   False),
+
+    # Status (Meta-specific: active / archived / staging)
+    ("status",                    ["status"],                            False),
+]
+
+# Alias legacy per retrocompat: manteniamo META_EXTRA come subset
 META_EXTRA = [
-    ("rich_text_description",   ["description"]),
-    ("short_description",       ["description_meta_short", "description"]),
+    ("rich_text_description",   ["rich_text_description", "description"]),
+    ("short_description",       ["short_description", "description_meta_short", "description"]),
     ("inventory",               ["quantity"]),
-    ("fb_product_category",     ["google_product_category"]),
+    ("fb_product_category",     ["fb_product_category", "google_product_category"]),
 ]
 
 
@@ -206,48 +296,62 @@ def build_google_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
 
 
 def build_meta_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
-    """Genera DataFrame conforme a Meta Catalog."""
+    """Genera DataFrame conforme a Meta Catalog usando i nomi ufficiali Meta Commerce.
+
+    Le colonne seguono la spec Meta: title (fino 200 char), description (fino 9999),
+    short_description (fino 200), rich_text_description (HTML), fb_product_category,
+    origin_country, manufacturer_info, importer_name/address (EU GPSR),
+    commerce_tax_category, custom_number_0..4, status, video.
+    """
     out = pd.DataFrame(index=df.index)
 
-    # base fields (subset di Google)
-    meta_base = [t for t, _, _, m in GOOGLE_FIELDS if m or t in (
-        "color", "size", "material", "pattern", "gender", "age_group", "item_group_id",
-        "custom_label_0", "custom_label_1", "custom_label_2", "custom_label_3", "custom_label_4",
-        "additional_image_link", "sale_price", "gtin", "mpn", "product_type", "google_product_category"
-    )]
-    field_map = {t: srcs for t, srcs, _, _ in GOOGLE_FIELDS}
+    # Popola tutti i campi Meta nell'ordine della spec
+    for target, srcs, _req in META_FIELDS:
+        if not srcs:
+            out[target] = ""
+            continue
+        out[target] = df.apply(lambda r: _coalesce(r, srcs), axis=1)
 
-    for t in meta_base:
-        srcs = field_map.get(t, [])
-        out[t] = df.apply(lambda r: _coalesce(r, srcs), axis=1) if srcs else ""
-
-    # extra Meta
-    for t, srcs in META_EXTRA:
-        out[t] = df.apply(lambda r: _coalesce(r, srcs), axis=1)
-
-    # normalizzazioni
+    # Normalizzazioni (stessa logica di Google dove applicabile)
     out["availability"] = out["availability"].map(_normalize_availability)
     out["condition"] = out["condition"].map(_normalize_condition)
     out["price"] = out["price"].map(lambda v: _normalize_price(v, currency))
     if "sale_price" in out.columns:
-        out["sale_price"] = out["sale_price"].map(lambda v: _normalize_price(v, currency) if v else "")
-    # se esiste title_meta nell'origine, usalo (più descrittivo per Meta)
-    if "title_meta" in df.columns:
-        out["title"] = df.apply(
-            lambda r: r["title_meta"] if str(r.get("title_meta", "")).strip()
-                       else _coalesce(r, ["title"]), axis=1
+        out["sale_price"] = out["sale_price"].map(
+            lambda v: _normalize_price(v, currency) if v else ""
         )
+
+    # Troncamenti Meta-specifici (limiti ufficiali Meta Commerce Manager)
     out["title"] = out["title"].map(lambda v: _truncate(v, 200))
     out["description"] = out["description"].map(lambda v: _truncate(v, 9999))
     if "short_description" in out.columns:
         out["short_description"] = out["short_description"].map(lambda v: _truncate(v, 200))
+
+    # Status: default 'active' se assente
+    if "status" in out.columns:
+        out["status"] = out["status"].apply(
+            lambda v: str(v).strip().lower() if str(v).strip() else "active"
+        )
+        out["status"] = out["status"].where(
+            out["status"].isin(["active", "archived", "staging"]), "active"
+        )
+
+    # manufacturer_part_number = mpn se vuoto (EU GPSR richiede)
+    if "manufacturer_part_number" in out.columns and "mpn" in out.columns:
+        mask = out["manufacturer_part_number"].astype(str).str.strip().eq("")
+        out.loc[mask, "manufacturer_part_number"] = out.loc[mask, "mpn"]
 
     return out
 
 
 def validate_feed(df: pd.DataFrame, target: str = "google") -> pd.DataFrame:
     """Ritorna un DataFrame con righe = campo, colonne = errori/warning."""
-    spec = GOOGLE_FIELDS if target == "google" else GOOGLE_FIELDS  # meta usa stessi required base
+    # Meta usa META_FIELDS (nomi ufficiali Meta), Google usa GOOGLE_FIELDS
+    if target == "meta":
+        # normalizza META_FIELDS al formato (target, srcs, gmc_req, meta_req)
+        spec = [(t, s, False, req) for t, s, req in META_FIELDS]
+    else:
+        spec = GOOGLE_FIELDS
     rows = []
     n = len(df)
     for t, _, gmc_req, meta_req in spec:

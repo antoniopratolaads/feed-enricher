@@ -179,11 +179,28 @@ Per ogni campo: popolalo se desumibile, altrimenti stringa vuota "" o array vuot
   "custom_label_3": "",
   "custom_label_4": "",
 
-  "_comment_P": "===== META-ONLY (usati solo dall'export Meta Catalog) =====",
-  "title_meta": "Titolo Meta max 200 char, più descrittivo",
-  "description_meta_short": "Short description Meta max 200 char",
-  "fb_product_category": "Categoria Facebook se diversa da Google",
-  "rich_text_description": "HTML Meta (bold/italic/list) — vuoto se non desumibile"
+  "_comment_P": "===== META CATALOG (nomi UFFICIALI Facebook/Instagram) =====",
+  "title_meta": "Titolo Meta max 200 char, più descrittivo del title GMC (diventerà 'title' nel feed Meta)",
+  "short_description": "Short description Meta max 200 char (campo ufficiale Meta separato da description)",
+  "rich_text_description": "Versione HTML della description (tag permessi: <b> <i> <u> <br> <ul> <li>). Vuoto se non desumibile.",
+  "fb_product_category": "Categoria Facebook (usa Google Taxonomy se non specifica, Meta accetta lo stesso path)",
+  "origin_country": "Paese origine ISO-2 (es. 'IT', 'DE', 'CN'). Equivalente Meta di GMC ships_from_country.",
+  "manufacturer_info": "Ragione sociale + indirizzo produttore (richiesto EU GPSR reg. 2023/988).",
+  "importer_name": "Nome importatore UE (obbligo EU GPSR per prodotti extra-EU).",
+  "importer_address": "Indirizzo importatore UE.",
+  "commerce_tax_category": "Categoria fiscale Meta Commerce (es. 'STANDARD', 'FOOD', 'BOOKS').",
+  "custom_number_0": "Custom label numerico 0 (Meta accetta numeri puri per scoring/ranking)",
+  "custom_number_1": "",
+  "custom_number_2": "",
+  "custom_number_3": "",
+  "custom_number_4": "",
+  "status": "active|archived|staging (default active)",
+  "video": [
+    {"tag": "demo", "url": "https://..."},
+    {"tag": "unboxing", "url": "https://..."}
+  ],
+
+  "_comment_Q": "===== NOTE ===== Le regole GMC si applicano anche al feed Meta. Meta è più tollerante sui title (200 char) e description (9999 char)."
 }
 
 REGOLE ASSOLUTE:
@@ -424,9 +441,13 @@ def enrich_dataframe(
         "included_destination", "excluded_destination", "tax_category",
         # Custom labels
         "custom_label_0", "custom_label_1", "custom_label_2", "custom_label_3", "custom_label_4",
-        # Meta-only
-        "title_meta", "description_meta_short", "fb_product_category", "rich_text_description",
-        # Meta interni (non GMC)
+        # Meta-only (nomi UFFICIALI Meta Catalog)
+        "title_meta", "short_description", "rich_text_description", "fb_product_category",
+        "origin_country", "manufacturer_info", "importer_name", "importer_address",
+        "commerce_tax_category", "status",
+        "custom_number_0", "custom_number_1", "custom_number_2", "custom_number_3", "custom_number_4",
+        "video",
+        # Meta interni (non esportati in feed)
         "_enrichment_status", "_detected_sector",
     ]
     for c in official_cols:
@@ -453,13 +474,14 @@ def enrich_dataframe(
             result.setdefault("_detected_sector", effective_sector)
         return idx, result
 
-    # Serializzazione speciale per campi strutturati GMC
+    # Serializzazione speciale per campi strutturati GMC / Meta
     _STRUCT_LIST_FIELDS = {"product_detail"}       # [{section_name, attribute_name, attribute_value}]
     _CERTIFICATION_FIELD = "certification"         # [{authority, name, code}]
+    _VIDEO_FIELD = "video"                         # [{tag, url}] Meta-only
     _SIMPLE_LIST_FIELDS = {"included_destination", "excluded_destination"}
     _PIPE_LIST_FIELDS = {"product_highlight"}      # GMC accetta multipli separati con |
     # Campi che esistono già e NON vanno sovrascritti se pieni (a meno che overwrite=True)
-    _OVERRIDE_ALWAYS = {"title", "description", "title_meta", "description_meta_short",
+    _OVERRIDE_ALWAYS = {"title", "description", "title_meta", "short_description",
                          "rich_text_description"}
 
     def _serialize(field: str, value) -> str:
@@ -484,6 +506,18 @@ def enrich_dataframe(
                 else:
                     parts.append(str(d))
             return " | ".join(p for p in parts if p.strip(":"))
+        # video (Meta): tag:url | ... for multiple videos
+        if field == _VIDEO_FIELD and isinstance(value, list):
+            parts = []
+            for d in value:
+                if isinstance(d, dict):
+                    tag = d.get("tag", "")
+                    url = d.get("url", "")
+                    if url:
+                        parts.append(f"{tag}:{url}" if tag else url)
+                elif d:
+                    parts.append(str(d))
+            return " | ".join(parts)
         # product_highlight: pipe separator, 150 char max per bullet
         if field in _PIPE_LIST_FIELDS and isinstance(value, list):
             return " | ".join(str(b)[:150] for b in value[:10])
@@ -527,8 +561,10 @@ def enrich_dataframe(
                     else:
                         # Campi identità / fonti autoritative: preserva l'originale del feed
                         if field in ("brand", "gtin", "mpn", "item_group_id",
-                                     "identifier_exists", "ships_from_country",
-                                     "tax_category", "min_handling_time", "max_handling_time"):
+                                     "identifier_exists", "ships_from_country", "origin_country",
+                                     "tax_category", "commerce_tax_category",
+                                     "min_handling_time", "max_handling_time",
+                                     "manufacturer_info", "importer_name", "importer_address"):
                             continue
                         df.at[idx, field] = serialized
 
