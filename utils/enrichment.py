@@ -296,6 +296,7 @@ def enrich_dataframe(
     overwrite_title_description: bool = True,
     max_tokens: int = 3500,
     style_guide_text: str = "",
+    skip_already_enriched: bool = True,
 ) -> pd.DataFrame:
     """Arricchisce l'intero dataframe in parallelo.
 
@@ -308,7 +309,14 @@ def enrich_dataframe(
     client = Anthropic(api_key=api_key)
     df = df.copy()
 
-    work_df = df.head(limit) if limit else df
+    # Filtra fuori i prodotti già arricchiti quando skip_already_enriched=True.
+    # Un prodotto è considerato già arricchito se _enrichment_status in ('ok', 'cached').
+    base_df = df
+    if skip_already_enriched and "_enrichment_status" in df.columns:
+        status = df["_enrichment_status"].astype(str).str.strip().str.lower()
+        unenriched_mask = ~status.isin(["ok", "cached"])
+        base_df = df[unenriched_mask]
+    work_df = base_df.head(limit) if limit else base_df
     indices = work_df.index.tolist()
     total = len(indices)
 

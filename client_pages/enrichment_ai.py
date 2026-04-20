@@ -102,12 +102,33 @@ else:
 limit = c3.number_input("Limite prodotti (0 = tutti)", min_value=0, value=min(50, len(df)), step=10)
 workers = c4.slider("Parallelismo", 1, 15, 5)
 
-overwrite = st.checkbox(
-    "Sovrascrivi `title` e `description` con la versione AI (consigliato)",
+oc1, oc2 = st.columns(2)
+overwrite = oc1.checkbox(
+    "Sovrascrivi `title` e `description` con la versione AI",
     value=True,
     help="Gli originali vengono salvati in `title_original` / `description_original` come backup. "
          "Vengono anche popolati colore/taglia/materiale/brand se mancanti."
 )
+skip_already_enriched = oc2.checkbox(
+    "Salta prodotti già arricchiti",
+    value=True,
+    help=(
+        "Filtra fuori prodotti con `_enrichment_status` = 'ok' o 'cached' prima di applicare "
+        "il limite. Così un limite=100 elabora 100 prodotti NON arricchiti, non rielabora i "
+        "primi 100 del feed. Decheck solo se vuoi forzare re-enrichment di tutti."
+    ),
+)
+
+# Conta prodotti non-arricchiti per mostrare target corretto
+if skip_already_enriched and "_enrichment_status" in df.columns:
+    _status_lower = df["_enrichment_status"].astype(str).str.strip().str.lower()
+    _n_enriched = int(_status_lower.isin(["ok", "cached"]).sum())
+    _n_unenriched = len(df) - _n_enriched
+    if _n_enriched > 0:
+        st.info(
+            f"📌 Catalogo: **{_n_enriched}** già arricchiti (preservati) · "
+            f"**{_n_unenriched}** da arricchire. Limit applicato solo sui prodotti da arricchire."
+        )
 
 if sector == "auto":
     with st.expander("🔎 Anteprima classificazione automatica", expanded=True):
@@ -192,7 +213,13 @@ if sector and sector != "auto":
             st.markdown(f"**Parole vietate**: {', '.join(forb)}")
         st.caption(f"Editabile in `config/sectors/{sector}.yaml`")
 
-n_to_process = limit or len(df)
+# Base subset: esclude i già-arricchiti quando skip_already_enriched attivo
+if skip_already_enriched and "_enrichment_status" in df.columns:
+    _mask_un = ~df["_enrichment_status"].astype(str).str.strip().str.lower().isin(["ok", "cached"])
+    _base = df[_mask_un]
+else:
+    _base = df
+n_to_process = min(limit, len(_base)) if limit else len(_base)
 
 # Cache hit preview
 use_cache = st.checkbox(
@@ -206,7 +233,7 @@ cache_ns = f"{st.session_state.get('session_id','default')}__{sector or 'generic
 cached_rows: dict = {}
 if use_cache:
     try:
-        preview_subset = df.head(n_to_process) if limit else df
+        preview_subset = _base.head(n_to_process) if limit else _base
         cached_rows, _ = enrich_cache.get_cached(
             preview_subset,
             namespace="shared_v1",
@@ -271,6 +298,7 @@ if launch:
                     sector=sector, overwrite_title_description=overwrite,
                     max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 3500)),
                     style_guide_text=style_guide_text,
+                    skip_already_enriched=skip_already_enriched,
                 )
 
             # Salva i risultati OK in cache per riuso futuro
