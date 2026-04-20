@@ -90,7 +90,8 @@ Campi GMC (usa questi nomi esatti, ometti quelli vuoti):
 - product_detail (array [{section_name,attribute_name,attribute_value}] 8-20 entries per INFO NON COPERTE SOPRA: Specifiche tecniche, Connettività, Nella confezione, Compatibilità, Composizione [ingredienti/allergeni/principio attivo], Forma farmaceutica, Posologia, Animale [specie, età], Dimensioni, Origine, Valori nutrizionali, Alimentazione, Installazione)
 - video_link · lifestyle_image_link
 - included_destination · excluded_destination (array) · tax_category
-- custom_label_0 (stagione) · custom_label_1 (fascia_prezzo) · custom_label_2 (uso/occasione) · custom_label_3 · custom_label_4
+
+NB: NON popolare i campi `custom_label_0..4` né `custom_number_0..4` — sono gestiti dal merchant via Labelizer basato su performance reali, non AI-inferable.
 
 Campi META Catalog (nomi ufficiali Meta Commerce):
 - title_meta (Meta title fino 200ch, più descrittivo)
@@ -100,7 +101,7 @@ Campi META Catalog (nomi ufficiali Meta Commerce):
 - manufacturer_info (nome+indirizzo produttore, EU GPSR reg 2023/988)
 - importer_name · importer_address (extra-EU GPSR)
 - commerce_tax_category (STANDARD|FOOD|BOOKS|...)
-- custom_number_0..4 · status (active|archived|staging)
+- status (active|archived|staging)
 - video (array [{tag,url}])
 
 Regole:
@@ -193,6 +194,13 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
         stop_reason = getattr(resp, "stop_reason", "") or ""
         data = _extract_json(text)
         if data:
+            # Custom labels/numbers non devono essere popolate dall'AI —
+            # sono gestite dal merchant via Labelizer/performance data.
+            for k in ("custom_label_0", "custom_label_1", "custom_label_2",
+                     "custom_label_3", "custom_label_4",
+                     "custom_number_0", "custom_number_1", "custom_number_2",
+                     "custom_number_3", "custom_number_4"):
+                data.pop(k, None)
             data["_enrichment_status"] = "ok"
             return data
         # Empty parse — attach debug context so the UI shows WHY
