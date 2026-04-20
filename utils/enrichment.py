@@ -170,9 +170,23 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
         (20+ campi con product_highlight[] e product_detail[]) supera spesso 1500 token
         su prodotti con description lunga.
     """
+    # Usa title/description ORIGINALI quando disponibili (set su primo enrichment).
+    # Questo rende hash cache stabile e evita re-enrichment ricorsivo del già-enrichato.
+    title_src = (
+        product.get("title_original")
+        if product.get("title_original")
+        and str(product.get("title_original", "")).strip().lower() not in ("", "nan", "none")
+        else product.get("title", "")
+    )
+    desc_src = (
+        product.get("description_original")
+        if product.get("description_original")
+        and str(product.get("description_original", "")).strip().lower() not in ("", "nan", "none")
+        else product.get("description", "")
+    )
     payload = {
-        "title": product.get("title", ""),
-        "description": str(product.get("description", ""))[:1500],
+        "title": title_src,
+        "description": str(desc_src)[:1500],
         "brand": product.get("brand", ""),
         "existing_category": product.get("product_type", "") or product.get("google_product_category", ""),
         "link": product.get("link", ""),

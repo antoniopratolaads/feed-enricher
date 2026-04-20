@@ -30,7 +30,21 @@ RELEVANT_INPUT_FIELDS = (
 
 
 def _hash_row(row: dict, *, model: str, sector: str, provider: str) -> str:
-    payload = {k: str(row.get(k, "")).strip() for k in RELEVANT_INPUT_FIELDS}
+    """Hash stabile sul contenuto ORIGINALE quando disponibile.
+
+    Se title_original / description_original esistono (set al primo
+    enrichment come backup), usali per calcolare hash. Così re-run dello
+    stesso prodotto già arricchito hitta la cache invece di pagare di nuovo.
+    """
+    payload = {}
+    for k in RELEVANT_INPUT_FIELDS:
+        if k == "title":
+            v = row.get("title_original") or row.get("title", "")
+        elif k == "description":
+            v = row.get("description_original") or row.get("description", "")
+        else:
+            v = row.get(k, "")
+        payload[k] = str(v or "").strip()
     payload["_meta"] = f"{provider}|{model}|{sector}"
     blob = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
     return hashlib.md5(blob).hexdigest()
