@@ -145,6 +145,15 @@ p, .stMarkdown { color: var(--text-primary); line-height: 1.6; }
     border-right: 1px solid var(--border) !important;
     padding-top: 0.5rem;
 }
+/* Nascondi toggle collapse sidebar — la riapertura e' bacata in Streamlit
+   quando stSidebarCollapsedControl non renderizza. Sidebar sempre visibile. */
+[data-testid="stBaseButton-headerNoPadding"],
+button[data-testid="stBaseButton-headerNoPadding"],
+[data-testid="stSidebarCollapseButton"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
 /* Rendi il toggle button non necessario (nascondiamo per evitare confusione) */
 [data-testid="stBaseButton-headerNoPadding"] {
     display: inline-flex !important;
