@@ -356,35 +356,97 @@ if show_diff:
             )
     st.divider()
 
+from utils.catalog_optimizer import GOOGLE_FIELDS, META_FIELDS
+
 tabs = st.tabs(["🛒 Variante Google", "📘 Variante Meta", "🏷️ Tutti gli attributi"])
 
-google_cols = [c for c in ["id", "title", "description", "brand", "google_product_category",
-                            "product_type", "color", "size", "material", "gender", "age_group",
-                            "pattern", "condition"] if c in enriched.columns]
-meta_cols = [c for c in ["id", "title_meta", "description_meta_short", "description",
-                          "brand", "google_product_category", "color", "size", "material",
-                          "gender", "age_group", "condition"] if c in enriched.columns]
+# Lista completa campi GMC ufficiali (ordine spec)
+_google_order = ["id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"]
+google_cols = [c for c in _google_order if c in enriched.columns]
+# Solo campi popolati per non mostrare colonne tutte vuote
+google_cols = [c for c in google_cols
+               if c == "id" or enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+
+# Lista completa campi Meta ufficiali
+_meta_order = ["id"] + [t for t, _, _ in META_FIELDS if t != "id"]
+meta_cols = [c for c in _meta_order if c in enriched.columns]
+meta_cols = [c for c in meta_cols
+             if c == "id" or enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+
+# Tutti gli attributi (compresi Meta extras + meta-internal)
+_all_order = ["id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"] + \
+             [t for t, _, _ in META_FIELDS if t not in {x for x, _, _, _ in GOOGLE_FIELDS}]
+other_cols = [c for c in enriched.columns if c not in _all_order]
+all_cols = [c for c in _all_order if c in enriched.columns] + other_cols
+all_cols = [c for c in all_cols
+            if c == "id" or enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
+
+# Column config sharing
+_col_cfg = {
+    "title":                  st.column_config.TextColumn(width="large"),
+    "description":            st.column_config.TextColumn(width="large"),
+    "title_meta":             st.column_config.TextColumn("title_meta (Meta)", width="large"),
+    "short_description":      st.column_config.TextColumn("short_description (Meta)", width="medium"),
+    "rich_text_description":  st.column_config.TextColumn("rich_text_description (HTML)", width="large"),
+    "product_highlight":      st.column_config.TextColumn(width="large"),
+    "product_detail":         st.column_config.TextColumn(width="large"),
+    "google_product_category": st.column_config.TextColumn(width="medium"),
+    "product_type":           st.column_config.TextColumn(width="medium"),
+}
 
 with tabs[0]:
-    st.caption("Campi ottimizzati per **Google Merchant Center** (title ≤150, description ≤5000)")
-    st.dataframe(enriched[google_cols].head(100), use_container_width=True, height=320,
-                  column_config={
-                      "title": st.column_config.TextColumn(width="large"),
-                      "description": st.column_config.TextColumn(width="large"),
-                  })
+    st.caption(
+        f"**{len(google_cols)-1}** campi GMC ufficiali popolati su {len([t for t,_,_,_ in GOOGLE_FIELDS])} disponibili. "
+        "Limiti: title ≤150 char, description ≤5000, product_highlight bullet ≤150 ciascuno."
+    )
+    st.dataframe(
+        enriched[google_cols].head(100),
+        use_container_width=True, height=420,
+        column_config=_col_cfg,
+    )
+    with st.expander("ℹ️ Legenda campi Google (spec ufficiale 2026)"):
+        st.markdown(
+            "- **Obbligatori**: id, title, description, link, image_link, availability, price, condition, brand, google_product_category\n"
+            "- **Identità**: gtin, mpn, identifier_exists, item_group_id\n"
+            "- **Apparel**: gender, age_group, color, size, size_type, size_system, material, pattern\n"
+            "- **Bundle/multipack**: is_bundle, multipack\n"
+            "- **Prezzo**: sale_price, unit_pricing_measure, unit_pricing_base_measure, installment, subscription_cost, loyalty_points\n"
+            "- **Spedizione**: shipping_weight/length/width/height, shipping_label, ships_from_country, handling_time\n"
+            "- **Energia**: energy_efficiency_class + min/max\n"
+            "- **Highlights**: product_highlight (array ≤10 bullet), product_detail (structured section:name=value)\n"
+            "- **Certification**: array [{authority, name, code}] (EPREL, FSC, Bio, ...)\n"
+            "- **Media**: additional_image_link, lifestyle_image_link, video_link\n"
+            "- **Destinazione/tasse**: included_destination, excluded_destination, tax_category, promotion_id\n"
+            "- **Custom labels**: custom_label_0..4"
+        )
 
 with tabs[1]:
-    st.caption("Campi ottimizzati per **Meta Catalog** (title ≤200, short_description ≤200, description ≤9999)")
-    st.dataframe(enriched[meta_cols].head(100), use_container_width=True, height=320,
-                  column_config={
-                      "title_meta": st.column_config.TextColumn("title (Meta)", width="large"),
-                      "description_meta_short": st.column_config.TextColumn("short_description (Meta)", width="medium"),
-                      "description": st.column_config.TextColumn("description", width="large"),
-                  })
+    st.caption(
+        f"**{len(meta_cols)-1}** campi Meta Commerce ufficiali popolati su {len([t for t,_,_ in META_FIELDS])} disponibili. "
+        "Limiti: title ≤200, description ≤9999, short_description ≤200."
+    )
+    st.dataframe(
+        enriched[meta_cols].head(100),
+        use_container_width=True, height=420,
+        column_config=_col_cfg,
+    )
+    with st.expander("ℹ️ Legenda campi Meta Catalog"):
+        st.markdown(
+            "- **Obbligatori**: id, title, description, availability, condition, price, link, image_link, brand\n"
+            "- **Meta-only**: title_meta (diventa 'title' nel feed), short_description, rich_text_description (HTML), fb_product_category, origin_country\n"
+            "- **EU GPSR compliance**: manufacturer_info, manufacturer_part_number, importer_name, importer_address\n"
+            "- **Commerce**: commerce_tax_category, status (active/archived/staging)\n"
+            "- **Custom**: custom_label_0..4 + custom_number_0..4 (numeric per ranking)\n"
+            "- **Media**: video [{tag, url}] strutturato multi-video"
+        )
 
 with tabs[2]:
-    all_cols = ["id"] + [c for c in enriched.columns if c not in ("id", "_enrichment_status")] + ["_enrichment_status"]
-    st.dataframe(enriched[all_cols].head(100), use_container_width=True, height=320)
+    st.caption(f"Tutti i **{len(all_cols)-1}** attributi popolati (GMC + Meta + metadata interni).")
+    st.dataframe(
+        enriched[all_cols].head(100),
+        use_container_width=True, height=420,
+        column_config=_col_cfg,
+    )
 
 dc1, dc2 = st.columns(2)
 dc1.download_button("Excel arricchito", to_excel_bytes({"enriched": enriched}),
