@@ -140,26 +140,30 @@ p, .stMarkdown { color: var(--text-primary); line-height: 1.6; }
 /* ============================================================
    SIDEBAR
    ============================================================ */
-[data-testid="stSidebar"] {
-    background: var(--bg-elevated) !important;
-    border-right: 1px solid var(--border) !important;
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"][aria-expanded="false"],
+section[data-testid="stSidebar"][aria-expanded="true"] {
+    background: #FFFFFF !important;
+    border-right: 1px solid #E5E7EB !important;
     padding-top: 0.5rem;
     min-width: 244px !important;
     max-width: 340px !important;
     width: 300px !important;
-    transform: none !important;  /* annulla il collapse -300px: sidebar sempre visibile */
+    transform: translateX(0) !important;
     position: relative !important;
     left: 0 !important;
+    top: 0 !important;
     visibility: visible !important;
     display: block !important;
+    opacity: 1 !important;
+    z-index: 10 !important;
 }
-/* Sidebar nav sempre cliccabile anche se Streamlit la considera chiusa */
-[data-testid="stSidebar"][aria-expanded="false"],
-[data-testid="stSidebar"][aria-expanded="true"] {
+/* Target anche classe emotion specifica */
+section.stSidebar, div[class*="stSidebar"] {
+    transform: translateX(0) !important;
     min-width: 244px !important;
     max-width: 340px !important;
     width: 300px !important;
-    transform: none !important;
 }
 /* Rendi il toggle button non necessario (nascondiamo per evitare confusione) */
 [data-testid="stBaseButton-headerNoPadding"] {
