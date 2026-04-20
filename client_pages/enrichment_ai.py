@@ -171,10 +171,14 @@ else:
             display_cols.append("_enrichment_status")
 
     display_df = filtered[display_cols].copy()
-    display_df.insert(0, "✔ Seleziona", False)
+    # Stato pinned vicino a checkbox (prima colonna dopo Seleziona)
     if "_enrichment_status" in display_df.columns:
-        display_df["Stato"] = display_df["_enrichment_status"].apply(_badge)
+        stato_series = display_df["_enrichment_status"].apply(_badge)
         display_df.drop(columns=["_enrichment_status"], inplace=True)
+    else:
+        stato_series = pd.Series(["⚪ —"] * len(display_df), index=display_df.index)
+    display_df.insert(0, "Stato", stato_series)
+    display_df.insert(0, "✔ Seleziona", False)
 
     # Quick action buttons
     sc1, sc2, sc3, sc4, sc5 = st.columns([1.4, 1.4, 1.4, 1.6, 2.2])
@@ -216,7 +220,7 @@ else:
         "title_meta":              st.column_config.TextColumn(width="large"),
         "short_description":       st.column_config.TextColumn(width="medium"),
         "rich_text_description":   st.column_config.TextColumn(width="large"),
-        "Stato": st.column_config.TextColumn(width="small",
+        "Stato": st.column_config.TextColumn(width="small", pinned=True,
                     help="🟢 OK · 🔵 Cache · 🔴 Errore · 🟡 Vuoto · ⚪ non arricchito"),
     }
     _height = 480 if view_mode != "Compatta" else 380
