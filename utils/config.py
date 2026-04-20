@@ -13,7 +13,7 @@ DEFAULTS = {
     "anthropic_model": "claude-sonnet-4-6",
     "openai_api_key": "",
     "openai_model": "gpt-4o-mini",
-    "max_tokens": 2048,
+    "max_tokens": 3500,
     "temperature": 0.3,
     "max_workers": 5,
     "default_limit": 50,

@@ -211,14 +211,16 @@ with tab3:
 
     c1, c2, c3 = st.columns(3)
     _autosave("max_tokens", c1.number_input(
-        "Max tokens per prodotto", 256, 4096, int(cfg["max_tokens"]), 128,
+        "Max tokens per prodotto", 512, 8192, int(cfg["max_tokens"]), 256,
         help=(
             "**Lunghezza massima della risposta AI per ogni prodotto.**\n\n"
-            "1 token ≈ 0.75 parole in italiano. 1024 token = ~750 parole.\n\n"
-            "- 512: titoli + descrizioni brevi\n"
-            "- 1024 (default): descrizioni medie + attributi completi\n"
-            "- 2048+: descrizioni molto lunghe o molti bullet\n\n"
-            "⚠️ Più alto = più costo. Se Claude tronca risposte alza questo valore."
+            "1 token ≈ 0.75 parole italiane. 3500 token = ~2600 parole / 18000 caratteri.\n\n"
+            "- 1024: titoli + descrizioni brevi — **troppo poco** con schema GMC completo\n"
+            "- 2048: schema medio, rischio tronca su prodotti ricchi\n"
+            "- 3500 (default): schema completo 40+ attributi + product_highlight + product_detail\n"
+            "- 5000+: descrizioni molto lunghe o cataloghi complessi (elettronica spec-heavy)\n\n"
+            "⚠️ Più alto = più costo output. Se vedi status 'empty:max_tokens' alza questo valore.\n"
+            "⚠️ Valori >4096 richiedono modelli che supportano extended output (Sonnet 4.6/Opus)."
         ),
     ))
     _autosave("temperature", c2.slider(

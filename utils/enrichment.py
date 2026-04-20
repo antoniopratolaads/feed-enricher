@@ -65,51 +65,135 @@ def _sector_brief(sector: dict) -> str:
             parts.append("EVITA:\n- " + "\n- ".join(dont))
     return "\n".join(parts)
 
-SYSTEM_PROMPT_BASE = """Sei un esperto di e-commerce, Google Merchant Center e copywriting performance-driven.
+SYSTEM_PROMPT_BASE = """Sei un esperto di e-commerce, Google Merchant Center, Meta Catalog e copywriting performance-driven.
 Ricevi un prodotto con: titolo, descrizione, eventuali metriche (clicks, conversioni, ROAS, vendite Shopify, viste).
-USA queste metriche per calibrare il tono:
-- se è zombie/no_clicks → titolo più aggressivo, attributi in evidenza, parole chiave search-friendly
-- se è bestseller → mantieni il messaggio vincente, valorizza prove sociali implicite (es. "amato")
-- se ha alte viste ma poche conversioni → migliora descrizione spingendo su benefici e differenziatori
+IL TUO COMPITO: estrarre E INFERIRE il MASSIMO NUMERO di attributi standard possibili leggendo titolo + descrizione + metadata.
+Scrivi UN SOLO JSON con TUTTI i campi qui sotto. Per ogni campo: popolalo SEMPRE se desumibile dal testo,
+altrimenti lascia stringa vuota "" o array vuoto []. NON lasciare i campi fuori dal JSON.
 
-Restituisci SEMPRE un JSON valido con questi NOMI UFFICIALI Google/Meta:
+USA le metriche performance per calibrare il tono:
+- zombie/no_clicks → titolo più aggressivo, attributi in evidenza, keyword search-friendly
+- bestseller → mantieni il messaggio vincente, valorizza prove sociali implicite
+- alte viste e poche conversioni → descrizione punta su benefici e differenziatori
+
+RESTITUISCI UN SINGOLO JSON valido con TUTTI questi campi (nomi UFFICIALI Google/Meta):
 {
-  "title": "Titolo OTTIMIZZATO Google Merchant Center (70-150 char). Formula: Brand + Prodotto + Attributi chiave",
-  "title_meta": "Titolo OTTIMIZZATO Meta Catalog (max 200 char, più descrittivo)",
-  "description": "Descrizione completa Google (200-5000 char). Tono descrittivo, NO promozionale",
-  "description_meta_short": "Short description Meta (max 200 char)",
-  "google_product_category": "Percorso completo Google Taxonomy",
-  "product_type": "Tassonomia interna 2-3 livelli",
-  "brand": "Brand del prodotto",
-  "color": "Colore/i principali (max 3, separati da '/')",
-  "size": "Taglia/misura/volume (per cosmesi: '50 ml', '200 g')",
-  "size_system": "EU|US|UK|IT|...",
-  "material": "Materiale principale + percentuali se disponibili",
+  "_comment_testi": "TESTI PRINCIPALI",
+  "title": "Titolo Google Merchant (70-150 char). Formula: Brand + Prodotto + Attributi chiave",
+  "title_meta": "Titolo Meta Catalog (max 200 char, più descrittivo)",
+  "description": "Descrizione Google 200-5000 char, tono descrittivo, NO promozionale",
+  "description_meta_short": "Short description Meta max 200 char",
+  "rich_text_description": "HTML Meta (bold/italic/list). Vuoto se non desumibile struttura",
+
+  "_comment_tassonomia": "CATEGORIZZAZIONE",
+  "google_product_category": "Percorso COMPLETO Google Taxonomy (es. 'Electronics > Video > Televisions')",
+  "product_type": "Tassonomia interna 2-3 livelli (es. 'TV > Smart TV OLED > 55 pollici')",
+  "fb_product_category": "Categoria Facebook se diversa da Google (es. 'Electronics > TVs')",
+
+  "_comment_identita": "IDENTITÀ PRODOTTO",
+  "brand": "Brand ufficiale del produttore",
+  "gtin": "Codice EAN-13 o UPC-12 (solo cifre) SE presente",
+  "mpn": "Manufacturer Part Number / codice modello brand",
+  "identifier_exists": "yes|no (no solo se mancano gtin+mpn per prodotti no-brand/vintage/custom)",
+  "item_group_id": "ID gruppo per varianti dello stesso modello (es. sku base senza taglia/colore)",
+
+  "_comment_attributi_apparel": "APPAREL & SCARPE & ACCESSORI",
   "gender": "male|female|unisex|''",
   "age_group": "newborn|infant|toddler|kids|adult|''",
-  "pattern": "Fantasia",
+  "color": "Colore/i principali (max 3, separati da '/')",
+  "size": "Taglia/numero EU/misura (es. '42', 'M', '15.6\"')",
+  "size_system": "EU|US|UK|IT|JP|CN|FR|DE|MEX|AU|''",
+  "size_type": "regular|petite|plus|maternity|big and tall|''",
+  "material": "Materiale principale + percentuali (es. '95% cotone, 5% elastan')",
+  "pattern": "Fantasia (tinta unita, righe, quadri, floreale, animalier, ...)",
+
+  "_comment_condizioni": "CONDIZIONE & DISPONIBILITÀ",
   "condition": "new|refurbished|used (default new)",
-  "product_highlight": ["bullet 1 (max 150 char)", "bullet 2", "..." ],
+  "availability": "in_stock|out_of_stock|preorder|backorder",
+  "availability_date": "YYYY-MM-DD se preorder/backorder, altrimenti ''",
+  "expiration_date": "YYYY-MM-DD per prodotti deperibili (food/pharma)",
+
+  "_comment_prezzo": "PREZZO & OFFERTE (compila solo se desumibili)",
+  "unit_pricing_measure": "es. '50 ml' (volume/peso del prodotto)",
+  "unit_pricing_base_measure": "es. '100 ml' (base calcolo prezzo unitario)",
+
+  "_comment_spedizione": "SPEDIZIONE & DIMENSIONI",
+  "shipping_weight": "es. '500 g' o '2 kg'",
+  "shipping_length": "es. '30 cm' (lunghezza pacco)",
+  "shipping_width": "es. '20 cm'",
+  "shipping_height": "es. '10 cm'",
+  "product_length": "Lunghezza prodotto (es. '160 cm' mobili, '15.6\"' laptop)",
+  "product_width": "Larghezza prodotto",
+  "product_height": "Altezza prodotto",
+  "product_weight": "Peso prodotto (es. '1.8 kg' laptop)",
+
+  "_comment_bundle": "BUNDLE & MULTIPACK",
+  "is_bundle": "yes|no|''",
+  "multipack": "Numero unità in multipack (es. '6') o '' se singolo",
+
+  "_comment_energia": "ENERGY LABEL (TV, monitor, elettrodomestici EU)",
+  "energy_efficiency_class": "A|B|C|D|E|F|G o '' se non applicabile",
+  "min_energy_efficiency_class": "Classe minima nella scala (es. 'G')",
+  "max_energy_efficiency_class": "Classe massima (es. 'A')",
+
+  "_comment_highlights": "HIGHLIGHTS & DETAILS",
+  "product_highlight": ["6-10 bullet verificabili, max 150 char ciascuno"],
   "product_detail": [
-    {"section_name": "Sezione", "attribute_name": "Nome", "attribute_value": "Valore"},
-    {"section_name": "...", "attribute_name": "...", "attribute_value": "..."}
+    {"section_name": "Specifiche tecniche", "attribute_name": "Processore", "attribute_value": "Intel Core i7-12700H"},
+    {"section_name": "Connettività", "attribute_name": "Porte", "attribute_value": "2x USB-C Thunderbolt 4, HDMI 2.1"},
+    {"section_name": "Nella confezione", "attribute_name": "Accessori", "attribute_value": "Cavo USB-C, documentazione"}
   ],
-  "unit_pricing_measure": "es. '50 ml' (volume del prodotto, utile per €/100ml in GMC)",
-  "unit_pricing_base_measure": "es. '100 ml' (base per il calcolo del prezzo unitario)",
-  "shipping_weight": "es. '500 g' (solo se desumibile)",
-  "is_bundle": "yes|no|'' (yes solo se è chiaramente un bundle/kit)",
-  "multipack": "es. '3' (numero unità in un multipack, vuoto se singolo)",
-  "keywords": ["lista", "di", "keyword"]
+
+  "_comment_compatibilita": "COMPATIBILITÀ & RICAMBI (auto, accessori elettronica)",
+  "compatible_with": "Modelli compatibili (es. 'Volkswagen Golf VII 2012-2020')",
+  "oem_number": "Codice OEM originale (ricambi auto)",
+
+  "_comment_food_pharma": "FOOD / PHARMA / INTEGRATORI (solo se applicabile)",
+  "ingredients": "Lista ingredienti se food/cosmetics/integratori (stringa separata da virgole)",
+  "allergens": "Allergeni in evidenza per food (glutine, lattosio, frutta a guscio, ...)",
+  "active_ingredient": "Principio attivo per farmaci OTC (es. 'Paracetamolo 500mg')",
+  "pharmaceutical_form": "compresse|capsule|sciroppo|gel|spray|cerotto|''",
+  "dosage": "Posologia consigliata (solo OTC/integratori con claim EFSA)",
+
+  "_comment_pet": "PET (solo se prodotto per animali)",
+  "animal_species": "cane|gatto|uccelli|pesci|roditori|rettili|''",
+  "life_stage": "puppy|kitten|junior|adult|senior|all|''",
+
+  "_comment_certificazioni": "CERTIFICAZIONI / OMOLOGAZIONI",
+  "certifications": ["CE", "FSC", "OEKO-TEX", "Bio IT-BIO-XXX", "DOP", "IGP", "..."],
+
+  "_comment_origine": "ORIGINE",
+  "country_of_origin": "Paese produzione (es. 'Italy', 'Germany', 'China')",
+  "made_in_italy": "yes|no|'' (yes solo se è chiaramente Made in Italy)",
+
+  "_comment_media": "MEDIA (hint per il catalogo, non inventare URL)",
+  "has_video": "yes|no|'' (se video link nel testo)",
+
+  "_comment_keyword": "KEYWORDS SEO",
+  "keywords": ["array", "di", "keyword", "search-friendly"],
+
+  "_comment_custom_labels": "CUSTOM LABELS automatiche (derivate dalla descrizione)",
+  "custom_label_0": "stagione / collezione (FW25, SS26, evergreen, ...) se desumibile",
+  "custom_label_1": "fascia_prezzo (entry|mid|premium|luxury) se desumibile",
+  "custom_label_2": "uso/occasione (daily, formale, sport, regalo, ...)",
+
+  "_comment_performance": "SEGNALI PERFORMANCE INFERITI",
+  "target_audience": "Descrizione breve target (es. 'Professionisti creativi', 'Runner intermedi 20+ km/sett')"
 }
 
-REGOLE FONDAMENTALI:
-- Non inventare dati: se non desumibile dal testo, lascia stringa vuota o array vuoto
-- title e title_meta DEVONO contenere il brand all'inizio
-- product_highlight: massimo 10 bullet point, ognuno verificabile dal testo
-- product_detail: lista oggetti con section_name + attribute_name + attribute_value
-- unit_pricing utile per cosmesi/food (€/100ml, €/100g)
-- description NON deve contenere parole vietate: 'acquista', 'compra', 'offerta', 'sconto', emoji
-- Rispondi SOLO con JSON, senza markdown."""
+REGOLE ASSOLUTE:
+1. **NON INVENTARE**: se un campo non è desumibile dal testo, lascia stringa vuota "" o array [].
+   MAI allucinare GTIN, prezzi, certificazioni, paesi origine, compatibilità.
+2. **SEMPRE popolati** quando desumibili: brand, color, size, material, gender, age_group, condition, product_highlight.
+3. **gtin/mpn**: popola solo se letterali nel testo. Se assenti: identifier_exists="no".
+4. **title e title_meta** DEVONO iniziare col brand.
+5. **product_highlight**: 6-10 bullet verificabili, max 150 char, OGNI bullet = una feature/spec misurabile.
+6. **product_detail**: 5-15 oggetti strutturati raggruppati per section_name logica (Specifiche, Connettività, Nella confezione, ...).
+7. **description**: NO parole vietate (acquista, compra, offerta, sconto, migliore, gratis, imperdibile, emoji).
+8. **unit_pricing**: utile per cosmesi/food/drogheria (€/100ml, €/100g).
+9. **Rispondi SOLO con JSON valido, senza markdown, senza ``` di apertura/chiusura**.
+10. I campi "_comment_*" sono solo organizzatori — DEVI ometterli dalla risposta JSON, includi solo i campi con valori effettivi.
+"""
 
 
 def get_default_base_prompt() -> str:
@@ -155,7 +239,7 @@ def _build_system_prompt(sector_name: str = "") -> str:
 
 
 def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
-                   sector: str = "", max_tokens: int = 2048) -> dict:
+                   sector: str = "", max_tokens: int = 3500) -> dict:
     """Chiama Claude per un singolo prodotto.
 
     Args:
@@ -266,7 +350,7 @@ def enrich_dataframe(
     progress_callback=None,
     sector: str = "",
     overwrite_title_description: bool = True,
-    max_tokens: int = 2048,
+    max_tokens: int = 3500,
 ) -> pd.DataFrame:
     """Arricchisce l'intero dataframe in parallelo.
 
@@ -293,15 +377,44 @@ def enrich_dataframe(
         except Exception:
             per_row_sector = {}
 
-    # nomi UFFICIALI Google/Meta (no più suffisso _ai)
+    # nomi UFFICIALI Google/Meta — elenco completo attributi estraibili dall'AI
     official_cols = [
-        "title", "description", "title_meta", "description_meta_short",
-        "google_product_category", "product_type", "brand", "color", "size",
-        "size_system", "material", "gender", "age_group", "pattern", "condition",
-        "product_highlight", "product_detail",
+        # Testi principali
+        "title", "description", "title_meta", "description_meta_short", "rich_text_description",
+        # Tassonomia
+        "google_product_category", "product_type", "fb_product_category",
+        # Identità
+        "brand", "gtin", "mpn", "identifier_exists", "item_group_id",
+        # Attributi apparel / electronics
+        "gender", "age_group", "color", "size", "size_system", "size_type",
+        "material", "pattern",
+        # Stato
+        "condition", "availability", "availability_date", "expiration_date",
+        # Prezzi unitari
         "unit_pricing_measure", "unit_pricing_base_measure",
-        "shipping_weight", "is_bundle", "multipack",
-        "keywords", "_enrichment_status", "_detected_sector",
+        # Spedizione / dimensioni
+        "shipping_weight", "shipping_length", "shipping_width", "shipping_height",
+        "product_length", "product_width", "product_height", "product_weight",
+        # Bundle
+        "is_bundle", "multipack",
+        # Energia
+        "energy_efficiency_class", "min_energy_efficiency_class", "max_energy_efficiency_class",
+        # Highlights
+        "product_highlight", "product_detail",
+        # Compatibilità
+        "compatible_with", "oem_number",
+        # Food / pharma
+        "ingredients", "allergens", "active_ingredient", "pharmaceutical_form", "dosage",
+        # Pet
+        "animal_species", "life_stage",
+        # Certificazioni / origine
+        "certifications", "country_of_origin", "made_in_italy",
+        # Media / target
+        "has_video", "target_audience",
+        # Keywords / custom labels
+        "keywords", "custom_label_0", "custom_label_1", "custom_label_2",
+        # Meta
+        "_enrichment_status", "_detected_sector",
     ]
     for c in official_cols:
         if c not in df.columns:
@@ -327,57 +440,67 @@ def enrich_dataframe(
             result.setdefault("_detected_sector", effective_sector)
         return idx, result
 
+    # Campi che possono essere in formato lista/oggetto e vanno serializzati
+    _LIST_FIELDS = {"keywords", "product_highlight", "certifications"}
+    _STRUCT_LIST_FIELDS = {"product_detail"}  # lista di dict
+    # Campi che esistono già e NON vanno sovrascritti se pieni (a meno che overwrite=True)
+    _OVERRIDE_ALWAYS = {"title", "description", "title_meta", "description_meta_short",
+                         "rich_text_description"}
+
+    def _serialize(field: str, value) -> str:
+        """Serializza il valore AI nel formato stringa che salviamo nella cella."""
+        if value is None:
+            return ""
+        if field in _STRUCT_LIST_FIELDS and isinstance(value, list):
+            return " | ".join(
+                f"{d.get('section_name', '')}:{d.get('attribute_name', '')}={d.get('attribute_value', '')}"
+                for d in value if isinstance(d, dict)
+            )
+        if field in _LIST_FIELDS and isinstance(value, list):
+            if field == "product_highlight":
+                return " | ".join(str(b)[:150] for b in value[:10])
+            return ", ".join(str(x) for x in value)
+        if isinstance(value, (list, dict)):
+            return json.dumps(value, ensure_ascii=False)
+        return str(value).strip()
+
     done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = [ex.submit(_task, idx) for idx in indices]
         for fut in as_completed(futures):
             idx, result = fut.result()
-            # campi specifici Meta (sempre nuovi, non esistono prima)
-            df.at[idx, "title_meta"] = result.get("title_meta", "")
-            df.at[idx, "description_meta_short"] = result.get("description_meta_short", "")
-            kw = result.get("keywords", [])
-            df.at[idx, "keywords"] = ", ".join(kw) if isinstance(kw, list) else str(kw)
+
+            # _enrichment_status e _detected_sector sempre
             df.at[idx, "_enrichment_status"] = result.get("_enrichment_status", "")
             if result.get("_detected_sector"):
                 df.at[idx, "_detected_sector"] = result["_detected_sector"]
 
-            # NUOVI CAMPI GMC (solo se desumibili)
-            ph = result.get("product_highlight", [])
-            if isinstance(ph, list) and ph:
-                # GMC accetta multipli product_highlight separati - li uniamo con pipe per il CSV
-                df.at[idx, "product_highlight"] = " | ".join(str(b)[:150] for b in ph[:10])
-
-            pd_list = result.get("product_detail", [])
-            if isinstance(pd_list, list) and pd_list:
-                # serializza come "section:name=value | section:name=value"
-                serialized = " | ".join(
-                    f"{d.get('section_name', '')}:{d.get('attribute_name', '')}={d.get('attribute_value', '')}"
-                    for d in pd_list if isinstance(d, dict)
-                )
-                df.at[idx, "product_detail"] = serialized
-
-            for f in ("unit_pricing_measure", "unit_pricing_base_measure",
-                      "shipping_weight", "is_bundle", "multipack"):
-                v = result.get(f, "")
-                if v:
-                    df.at[idx, f] = v
-
-            # OVERRIDE / POPOLAMENTO con nomi UFFICIALI
-            for field in ("title", "description", "google_product_category", "product_type",
-                          "brand", "color", "size", "size_system", "material",
-                          "gender", "age_group", "pattern", "condition"):
-                ai_value = result.get(field, "")
-                if not ai_value:
+            # Itera TUTTI i campi ufficiali e salva quelli popolati dall'AI
+            for field in official_cols:
+                if field in ("_enrichment_status", "_detected_sector"):
                     continue
-                # title/description: sovrascrivi sempre se overwrite=True
-                if field in ("title", "description"):
-                    if overwrite_title_description:
-                        df.at[idx, field] = ai_value
+                ai_value = result.get(field)
+                if ai_value is None or ai_value == "" or ai_value == []:
+                    continue
+                serialized = _serialize(field, ai_value)
+                if not serialized:
+                    continue
+                if field in _OVERRIDE_ALWAYS:
+                    if overwrite_title_description or field not in ("title", "description"):
+                        df.at[idx, field] = serialized
                 else:
-                    # attributi: popola se vuoto, sempre
+                    # Attributi: popola se il campo è vuoto; sovrascrivi attributi derivati (size, color, ...) sempre
                     current = str(df.at[idx, field] if field in df.columns else "").strip()
-                    if not current:
-                        df.at[idx, field] = ai_value
+                    if not current or current.lower() in ("nan", "none"):
+                        df.at[idx, field] = serialized
+                    else:
+                        # Se c'era già un valore nel feed originale per attributi canonici, rispetta l'originale
+                        # per campi identity (brand, gtin, mpn) — altrimenti sovrascrivi con AI
+                        if field in ("brand", "gtin", "mpn", "item_group_id",
+                                     "identifier_exists", "oem_number", "country_of_origin"):
+                            continue  # mantieni valore originale
+                        df.at[idx, field] = serialized
+
             done += 1
             if progress_callback:
                 progress_callback(done, total)
