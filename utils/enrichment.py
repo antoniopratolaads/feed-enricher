@@ -130,13 +130,16 @@ def _extract_json(text: str) -> dict:
     return {}
 
 
-def _build_system_prompt(sector_name: str = "", style_guide_text: str = "") -> str:
+def _build_system_prompt(sector_name: str = "", style_guide_text: str = "",
+                          target: str = "both") -> str:
     """Compone il system prompt.
 
     Priorità:
       1. Template utente attivo (da utils/prompts.py) per questo sector → usato tale-e-quale
       2. BASE + brief settoriale YAML (default)
     style_guide_text: testo style guide del catalogo, appeso per coerenza cross-prodotto.
+    target: 'google' | 'meta' | 'both' — filtra blocco Meta dal prompt quando 'google'
+            per risparmiare token output ~15%.
     """
     # 1. Override utente via prompt versioning
     try:
@@ -149,7 +152,23 @@ def _build_system_prompt(sector_name: str = "", style_guide_text: str = "") -> s
     except ImportError:
         pass
 
-    parts = [SYSTEM_PROMPT_BASE]
+    prompt = SYSTEM_PROMPT_BASE
+    # Filtra il blocco META se target è solo Google
+    if target == "google":
+        # Rimuove da "Campi META Catalog" fino a "Regole:" (esclusivo)
+        import re as _re
+        prompt = _re.sub(
+            r"Campi META Catalog.*?(?=Regole:)",
+            "",
+            prompt,
+            count=1,
+            flags=_re.DOTALL,
+        )
+        prompt += "\nTarget: SOLO Google Merchant Center. NON popolare campi META (title_meta, short_description, rich_text_description, fb_product_category, origin_country, manufacturer_info, importer_*, commerce_tax_category, status, video).\n"
+    elif target == "meta":
+        prompt += "\nTarget: SOLO Meta Catalog. Popola titoli/description con limiti Meta (title ≤200, description ≤9999, short_description ≤200). Puoi skippare campi GMC-only come certification, transit_time_label, shipping_label, tax_category, included_destination, excluded_destination, promotion_id.\n"
+
+    parts = [prompt]
     if sector_name:
         sector = load_sector(sector_name)
         if sector:
@@ -162,7 +181,8 @@ def _build_system_prompt(sector_name: str = "", style_guide_text: str = "") -> s
 
 def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
                    sector: str = "", max_tokens: int = 3500,
-                   style_guide_text: str = "") -> dict:
+                   style_guide_text: str = "",
+                   target: str = "both") -> dict:
     """Chiama Claude per un singolo prodotto.
 
     Args:
@@ -205,7 +225,7 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
             max_tokens=max_tokens,
             system=[{
                 "type": "text",
-                "text": _build_system_prompt(sector, style_guide_text),
+                "text": _build_system_prompt(sector, style_guide_text, target),
                 "cache_control": {"type": "ephemeral"},
             }],
             messages=[{"role": "user", "content": f"Prodotto:\n{input_txt}"}],
@@ -297,6 +317,7 @@ def enrich_dataframe(
     max_tokens: int = 3500,
     style_guide_text: str = "",
     skip_already_enriched: bool = True,
+    target: str = "both",
 ) -> pd.DataFrame:
     """Arricchisce l'intero dataframe in parallelo.
 
@@ -392,7 +413,8 @@ def enrich_dataframe(
         else:
             effective_sector = sector
         result = enrich_product(client, row, model=model, sector=effective_sector,
-                                max_tokens=max_tokens, style_guide_text=style_guide_text)
+                                max_tokens=max_tokens, style_guide_text=style_guide_text,
+                                target=target)
         if effective_sector:
             result.setdefault("_detected_sector", effective_sector)
         return idx, result

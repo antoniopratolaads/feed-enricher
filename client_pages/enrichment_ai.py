@@ -102,7 +102,7 @@ else:
 limit = c3.number_input("Limite prodotti (0 = tutti)", min_value=0, value=min(50, len(df)), step=10)
 workers = c4.slider("Parallelismo", 1, 15, 5)
 
-oc1, oc2 = st.columns(2)
+oc1, oc2, oc3 = st.columns([2, 2, 2])
 overwrite = oc1.checkbox(
     "Sovrascrivi `title` e `description` con la versione AI",
     value=True,
@@ -114,8 +114,21 @@ skip_already_enriched = oc2.checkbox(
     value=True,
     help=(
         "Filtra fuori prodotti con `_enrichment_status` = 'ok' o 'cached' prima di applicare "
-        "il limite. Così un limite=100 elabora 100 prodotti NON arricchiti, non rielabora i "
-        "primi 100 del feed. Decheck solo se vuoi forzare re-enrichment di tutti."
+        "il limite. Decheck per forzare re-enrichment."
+    ),
+)
+target_choice = oc3.radio(
+    "Target enrichment",
+    options=["both", "google", "meta"],
+    format_func=lambda v: {"both": "🛒📘 Entrambi", "google": "🛒 Solo Google", "meta": "📘 Solo Meta"}[v],
+    horizontal=True,
+    help=(
+        "**Entrambi** (default): popola tutti i campi GMC + Meta.\n\n"
+        "**Solo Google**: skippa campi Meta-only (title_meta, short_description, "
+        "rich_text_description, fb_product_category, origin_country, manufacturer_info, "
+        "importer_*, commerce_tax_category, status, video). Risparmia ~15% token output.\n\n"
+        "**Solo Meta**: skippa campi GMC-only (certification, tax_category, included/"
+        "excluded_destination, transit_time_label, promotion_id). Risparmio ~10%."
     ),
 )
 
@@ -299,6 +312,7 @@ if launch:
                     max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 3500)),
                     style_guide_text=style_guide_text,
                     skip_already_enriched=skip_already_enriched,
+                    target=target_choice,
                 )
 
             # Salva i risultati OK in cache per riuso futuro
