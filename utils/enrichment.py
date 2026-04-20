@@ -76,7 +76,7 @@ Campi GMC (usa questi nomi esatti, ometti quelli vuoti):
 - google_product_category (path completo) · product_type (merchant 2-3 livelli)
 - brand · gtin (solo cifre 8/12/13/14) · mpn · identifier_exists (no se mancano gtin+mpn) · item_group_id
 - gender (male|female|unisex) · age_group (newborn|infant|toddler|kids|adult) · adult (yes|no)
-- color (max 3, '/') · size · size_system (EU|US|UK|IT|...) · size_type (regular|petite|plus|maternity|big and tall)
+- color (max 3, '/') · size · size_system (EU|US|UK|IT|JP|CN|FR|DE|MEX|AU|BR — default EU per cataloghi italiani con taglie numeriche 35-50 scarpe o 34-62 abbigliamento) · size_type (regular|petite|plus|maternity|big and tall)
 - material (con %) · pattern (tinta unita|righe|quadri|floreale|animalier|...)
 - condition (new|refurbished|used) · availability (in_stock|out_of_stock|preorder|backorder)
 - availability_date · expiration_date (YYYY-MM-DD)
