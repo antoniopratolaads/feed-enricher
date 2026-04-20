@@ -7,6 +7,17 @@ from xml.sax.saxutils import escape
 import pandas as pd
 
 
+def _safe_max_len(series: pd.Series) -> int:
+    """Return max string length in series, robust to NA/None/float NaN.
+
+    Handles pandas nullable string dtype which preserves pd.NA after astype(str)."""
+    try:
+        # Fill NA then cast via pure Python str() which always returns a string
+        return int(series.fillna("").apply(lambda x: len(str(x))).max())
+    except (ValueError, TypeError):
+        return 10
+
+
 def to_excel_bytes(dfs: dict[str, pd.DataFrame]) -> bytes:
     """Genera xlsx multi-foglio."""
     buf = io.BytesIO()
@@ -16,7 +27,11 @@ def to_excel_bytes(dfs: dict[str, pd.DataFrame]) -> bytes:
             df.to_excel(w, sheet_name=safe, index=False)
             ws = w.sheets[safe]
             for i, col in enumerate(df.columns):
-                width = min(max(len(str(col)), df[col].astype(str).map(len).max() if len(df) else 10), 50)
+                if len(df) == 0:
+                    content_width = 10
+                else:
+                    content_width = _safe_max_len(df[col])
+                width = min(max(len(str(col)), content_width), 50)
                 ws.set_column(i, i, width)
     return buf.getvalue()
 
