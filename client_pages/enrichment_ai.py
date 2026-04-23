@@ -10,8 +10,9 @@ from utils.ui import (
 )
 from utils.enrichment import (
     enrich_dataframe, refine_product, chat_about_data, DEFAULT_MODEL,
-    list_sectors, load_sector,
+    list_sectors, load_sector, detect_provider, make_client,
 )
+from utils.config import load_config as _load_cfg_for_keys
 from utils.exporter import to_excel_bytes
 from utils import cache as enrich_cache
 
@@ -33,11 +34,18 @@ if st.session_state.get("feed_df") is None:
         cta_key="_empty_upload",
     )
     st.stop()
-if not st.session_state.get("api_key"):
+_cfg_keys = _load_cfg_for_keys()
+_has_any_key = bool(
+    st.session_state.get("api_key")
+    or _cfg_keys.get("anthropic_api_key")
+    or _cfg_keys.get("openai_api_key")
+    or _cfg_keys.get("gemini_api_key")
+)
+if not _has_any_key:
     empty_state(
         icon="🔑",
         title="API key non configurata",
-        description="L'enrichment AI richiede una chiave Claude. Configurala in Settings "
+        description="L'enrichment AI richiede una chiave Claude, OpenAI o Gemini. Configurala in Settings "
                     "(salvata in locale, non inviata ai server).",
         cta_label="Configura API key →",
         cta_page="client_pages/settings.py",
@@ -252,13 +260,15 @@ with st.expander("⚙️ Opzioni avanzate (modello, settore, target)", expanded=
     ac1, ac2, ac3 = st.columns(3)
     _ALL_MODELS = [
         "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
-        "claude-haiku-3-5", "gpt-5", "gpt-5-mini", "gpt-5-nano",
+        "claude-haiku-3-5",
+        "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+        "gpt-5", "gpt-5-mini", "gpt-5-nano",
         "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini",
         "o3", "o3-mini", "o4-mini",
     ]
     model = ac1.selectbox("Modello AI", _ALL_MODELS,
                            index=_ALL_MODELS.index("claude-sonnet-4-6"),
-                           help="Default Sonnet 4.6. Economia: Haiku / gpt-4.1-nano.")
+                           help="Default Sonnet 4.6. Economia: Gemini Flash-Lite / Haiku / gpt-4.1-nano.")
 
     sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
     default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
@@ -321,6 +331,7 @@ with st.expander("⚙️ Opzioni avanzate (modello, settore, target)", expanded=
 # CACHE + STIMA COSTO
 # ============================================================
 n_selected = len(selected_indices)
+active_provider = detect_provider(model)
 cached_rows: dict = {}
 n_hit = 0
 n_miss = n_selected
@@ -328,7 +339,7 @@ if n_selected > 0 and use_cache:
     try:
         cached_rows, _ = enrich_cache.get_cached(
             df.loc[selected_indices], namespace="shared_v1",
-            model=model, sector=sector, provider="anthropic",
+            model=model, sector=sector, provider=active_provider,
         )
         n_hit = len(cached_rows)
         n_miss = n_selected - n_hit
@@ -367,14 +378,20 @@ if launch:
         with LoadingProgress("Enrichment AI in corso", total=n_miss or n_selected) as lp:
             def cb(d, t):
                 lp.update(d, subtitle=f"{d}/{t} prodotti processati")
+            _keys_map = {
+                "anthropic_api_key": _cfg_keys.get("anthropic_api_key") or st.session_state.get("api_key", ""),
+                "openai_api_key": _cfg_keys.get("openai_api_key", ""),
+                "gemini_api_key": _cfg_keys.get("gemini_api_key", ""),
+            }
             enriched_subset = enrich_dataframe(
-                selected_df, api_key=st.session_state["api_key"], model=model,
+                selected_df, api_key=_keys_map, model=model,
                 max_workers=workers, limit=None, progress_callback=cb,
                 sector=sector, overwrite_title_description=overwrite,
                 max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 3500)),
                 style_guide_text=style_guide_text,
                 skip_already_enriched=False,
                 target=target_choice,
+                provider=active_provider,
             )
 
         if use_cache and "_enrichment_status" in enriched_subset.columns:
@@ -387,7 +404,7 @@ if launch:
                               if k not in ("_enrichment_status",) and pd.notna(row.get(k))}
                     pairs.append((src, result))
                 enrich_cache.store(pairs, namespace="shared_v1",
-                                     model=model, sector=sector, provider="anthropic")
+                                     model=model, sector=sector, provider=active_provider)
             except Exception:
                 pass
 
@@ -832,12 +849,17 @@ rcc1, rcc2 = st.columns([1, 4])
 n_apply = rcc1.number_input("Max prodotti da aggiornare", 1, 500, min(20, len(selected)), 5,
                               help="Limita per controllare costo")
 if rcc2.button("Applica refinement", type="primary", disabled=not instruction or not len(selected)):
-    client = Anthropic(api_key=st.session_state["api_key"])
+    _prov_r = detect_provider(model)
+    _key_r = (_cfg_keys.get(f"{_prov_r}_api_key") or st.session_state.get("api_key", ""))
+    if not _key_r:
+        st.error(f"API key mancante per provider '{_prov_r}'. Configura in Settings.")
+        st.stop()
+    client = make_client(_prov_r, _key_r)
     progress = st.progress(0)
     target = selected.head(n_apply)
     updated = 0
     for i, (idx, row) in enumerate(target.iterrows()):
-        result = refine_product(client, row.to_dict(), instruction, model=model)
+        result = refine_product(client, row.to_dict(), instruction, model=model, provider=_prov_r)
         if result and "_error" not in result:
             for k in ("title", "description"):
                 if result.get(k):
@@ -903,8 +925,13 @@ if st.session_state["enrich_chat"] and st.session_state["enrich_chat"][-1]["role
                 ctx_lines.append(f"Lunghezza media title: {avg_len:.0f} char")
             ctx = "\n".join(ctx_lines)
 
-            client = Anthropic(api_key=st.session_state["api_key"])
-            reply = chat_about_data(client, st.session_state["enrich_chat"], ctx, model=model)
+            _prov_c = detect_provider(model)
+            _key_c = (_cfg_keys.get(f"{_prov_c}_api_key") or st.session_state.get("api_key", ""))
+            if not _key_c:
+                reply = f"Errore: API key mancante per provider '{_prov_c}'. Configura in Settings."
+            else:
+                client = make_client(_prov_c, _key_c)
+                reply = chat_about_data(client, st.session_state["enrich_chat"], ctx, model=model, provider=_prov_c)
             st.markdown(reply)
             st.session_state["enrich_chat"].append({"role": "assistant", "content": reply})
 

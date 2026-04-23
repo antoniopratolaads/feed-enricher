@@ -1,15 +1,118 @@
-"""Enrichment prodotti via Claude API: taxonomy Google + estrazione attributi."""
+"""Enrichment prodotti via AI (Claude / OpenAI / Gemini): taxonomy Google + estrazione attributi."""
 from __future__ import annotations
 
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd
 from anthropic import Anthropic
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
+
+
+# ============================================================
+# PROVIDER ABSTRACTION — Claude / OpenAI / Gemini
+# ============================================================
+def detect_provider(model: str) -> str:
+    """Resolve provider name from model id."""
+    m = (model or "").lower()
+    if m.startswith("claude"):
+        return "anthropic"
+    if m.startswith("gemini"):
+        return "gemini"
+    if m.startswith(("gpt", "o3", "o4")):
+        return "openai"
+    return "anthropic"
+
+
+def _resolve_key(api_key: Union[str, dict, None], provider: str) -> str:
+    """Accept str|dict|None. If dict, pick by provider. If None, load config."""
+    if isinstance(api_key, dict):
+        mapping = {
+            "anthropic": ("anthropic_api_key", "api_key"),
+            "openai":    ("openai_api_key",),
+            "gemini":    ("gemini_api_key",),
+        }
+        for k in mapping.get(provider, ()):
+            if v := api_key.get(k):
+                return v
+        return ""
+    if api_key:
+        return api_key
+    try:
+        from .config import load_config
+        cfg = load_config()
+        return cfg.get(f"{provider}_api_key", "") or ""
+    except Exception:
+        return ""
+
+
+def make_client(provider: str, api_key: str):
+    """Create provider-specific client."""
+    if provider == "anthropic":
+        return Anthropic(api_key=api_key)
+    if provider == "openai":
+        from openai import OpenAI
+        return OpenAI(api_key=api_key)
+    if provider == "gemini":
+        from google import genai
+        return genai.Client(api_key=api_key)
+    raise ValueError(f"Unknown provider: {provider}")
+
+
+def _generate(client, provider: str, model: str, system: str, user: str,
+              max_tokens: int = 3500, temperature: float = 0.3,
+              json_mode: bool = False) -> tuple[str, str]:
+    """Unified generation. Returns (text, stop_reason)."""
+    if provider == "anthropic":
+        resp = client.messages.create(
+            model=model, max_tokens=max_tokens, temperature=temperature,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user}],
+        )
+        text = resp.content[0].text if resp.content else ""
+        return text, getattr(resp, "stop_reason", "") or ""
+
+    if provider == "openai":
+        kwargs = dict(
+            model=model, max_tokens=max_tokens, temperature=temperature,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        resp = client.chat.completions.create(**kwargs)
+        choice = resp.choices[0]
+        text = choice.message.content or ""
+        return text, choice.finish_reason or ""
+
+    if provider == "gemini":
+        cfg = {
+            "system_instruction": system,
+            "max_output_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if json_mode:
+            cfg["response_mime_type"] = "application/json"
+        resp = client.models.generate_content(
+            model=model, contents=user, config=cfg,
+        )
+        text = resp.text or ""
+        stop = ""
+        try:
+            stop = resp.candidates[0].finish_reason.name if resp.candidates else ""
+        except Exception:
+            pass
+        # Gemini signals output-cap as "MAX_TOKENS"
+        if stop == "MAX_TOKENS":
+            stop = "max_tokens"
+        return text, stop
+
+    raise ValueError(f"Unknown provider: {provider}")
 
 import os, yaml
 from pathlib import Path
@@ -179,11 +282,12 @@ def _build_system_prompt(sector_name: str = "", style_guide_text: str = "",
     return "".join(parts)
 
 
-def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
+def enrich_product(client, product: dict, model: str = DEFAULT_MODEL,
                    sector: str = "", max_tokens: int = 3500,
                    style_guide_text: str = "",
-                   target: str = "both") -> dict:
-    """Chiama Claude per un singolo prodotto.
+                   target: str = "both",
+                   provider: Optional[str] = None) -> dict:
+    """Chiama il provider AI per un singolo prodotto.
 
     Args:
         max_tokens: tetto token output. 2048 default perché il JSON completo
@@ -219,19 +323,15 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
             payload[key] = v
     input_txt = json.dumps(payload, ensure_ascii=False, default=str)
 
+    prov = provider or detect_provider(model)
     try:
-        resp = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=[{
-                "type": "text",
-                "text": _build_system_prompt(sector, style_guide_text, target),
-                "cache_control": {"type": "ephemeral"},
-            }],
-            messages=[{"role": "user", "content": f"Prodotto:\n{input_txt}"}],
+        system_txt = _build_system_prompt(sector, style_guide_text, target)
+        text, stop_reason = _generate(
+            client, prov, model, system_txt,
+            f"Prodotto:\n{input_txt}",
+            max_tokens=max_tokens, temperature=0.3,
+            json_mode=(prov in ("openai", "gemini")),
         )
-        text = resp.content[0].text if resp.content else ""
-        stop_reason = getattr(resp, "stop_reason", "") or ""
         data = _extract_json(text)
         if data:
             # Custom labels/numbers non devono essere popolate dall'AI —
@@ -245,7 +345,7 @@ def enrich_product(client: Anthropic, product: dict, model: str = DEFAULT_MODEL,
             return data
         # Empty parse — attach debug context so the UI shows WHY
         snippet = (text or "").strip()[:180].replace("\n", " ")
-        if stop_reason == "max_tokens":
+        if str(stop_reason).lower() in ("max_tokens", "length"):
             status = f"empty:max_tokens (alza max_tokens, risposta troncata)"
         elif not text:
             status = "empty:no_text (Claude non ha risposto)"
@@ -263,7 +363,9 @@ Restituisci SEMPRE solo questo JSON:
 Mantieni inalterato qualsiasi attributo non menzionato. Non inventare informazioni."""
 
 
-def refine_product(client: Anthropic, product: dict, instruction: str, model: str = DEFAULT_MODEL) -> dict:
+def refine_product(client, product: dict, instruction: str,
+                   model: str = DEFAULT_MODEL,
+                   provider: Optional[str] = None) -> dict:
     payload = {
         "current_title": product.get("title", ""),
         "current_description": product.get("description", ""),
@@ -273,20 +375,22 @@ def refine_product(client: Anthropic, product: dict, instruction: str, model: st
         "size": product.get("size", ""),
     }
     user_msg = f"Istruzione: {instruction}\n\nProdotto:\n{json.dumps(payload, ensure_ascii=False)}"
+    prov = provider or detect_provider(model)
     try:
-        resp = client.messages.create(
-            model=model, max_tokens=800,
-            system=[{"type": "text", "text": REFINE_SYSTEM, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": user_msg}],
+        text, _ = _generate(
+            client, prov, model, REFINE_SYSTEM, user_msg,
+            max_tokens=800, temperature=0.4,
+            json_mode=(prov in ("openai", "gemini")),
         )
-        text = resp.content[0].text if resp.content else ""
         return _extract_json(text) or {}
     except Exception as e:
         return {"_error": str(e)}
 
 
-def chat_about_data(client: Anthropic, history: list, df_context: str, model: str = DEFAULT_MODEL) -> str:
-    """Chat libera con Claude usando un riassunto del catalogo come contesto."""
+def chat_about_data(client, history: list, df_context: str,
+                    model: str = DEFAULT_MODEL,
+                    provider: Optional[str] = None) -> str:
+    """Chat libera con AI usando un riassunto del catalogo come contesto."""
     system = (
         "Sei l'assistente AI di Feed Enricher Pro. Aiuti l'utente a migliorare il suo feed prodotto. "
         "Hai accesso a un riassunto del catalogo arricchito. Quando l'utente chiede modifiche concrete, "
@@ -294,20 +398,44 @@ def chat_about_data(client: Anthropic, history: list, df_context: str, model: st
         "Sii conciso, max 5 frasi.\n\n"
         f"CONTESTO CATALOGO:\n{df_context}"
     )
+    prov = provider or detect_provider(model)
     try:
-        resp = client.messages.create(
-            model=model, max_tokens=600,
-            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-            messages=history,
-        )
-        return resp.content[0].text if resp.content else ""
+        if prov == "anthropic":
+            resp = client.messages.create(
+                model=model, max_tokens=600,
+                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+                messages=history,
+            )
+            return resp.content[0].text if resp.content else ""
+        if prov == "openai":
+            msgs = [{"role": "system", "content": system}] + history
+            resp = client.chat.completions.create(
+                model=model, max_tokens=600, temperature=0.5, messages=msgs,
+            )
+            return resp.choices[0].message.content or ""
+        if prov == "gemini":
+            # Flatten history → single user turn preserving roles as plain text
+            lines = []
+            for m in history:
+                role = "Utente" if m.get("role") == "user" else "Assistente"
+                content = m.get("content", "")
+                if isinstance(content, list):
+                    content = " ".join(str(c.get("text", c)) if isinstance(c, dict) else str(c) for c in content)
+                lines.append(f"{role}: {content}")
+            user_blob = "\n\n".join(lines)
+            resp = client.models.generate_content(
+                model=model, contents=user_blob,
+                config={"system_instruction": system, "max_output_tokens": 600, "temperature": 0.5},
+            )
+            return resp.text or ""
+        return f"Provider non supportato: {prov}"
     except Exception as e:
         return f"Errore: {e}"
 
 
 def enrich_dataframe(
     df: pd.DataFrame,
-    api_key: str,
+    api_key: Union[str, dict, None] = None,
     model: str = DEFAULT_MODEL,
     max_workers: int = 5,
     limit: Optional[int] = None,
@@ -318,6 +446,7 @@ def enrich_dataframe(
     style_guide_text: str = "",
     skip_already_enriched: bool = True,
     target: str = "both",
+    provider: Optional[str] = None,
 ) -> pd.DataFrame:
     """Arricchisce l'intero dataframe in parallelo.
 
@@ -327,7 +456,11 @@ def enrich_dataframe(
             - nome settore (es. 'abbigliamento'): applica best practice del settore
             - 'auto': auto-classifica ogni prodotto e applica il settore rilevato
     """
-    client = Anthropic(api_key=api_key)
+    prov = provider or detect_provider(model)
+    key = _resolve_key(api_key, prov)
+    if not key:
+        raise ValueError(f"API key mancante per provider '{prov}'. Configura in Settings.")
+    client = make_client(prov, key)
     df = df.copy()
 
     # Filtra fuori i prodotti già arricchiti quando skip_already_enriched=True.
@@ -414,7 +547,7 @@ def enrich_dataframe(
             effective_sector = sector
         result = enrich_product(client, row, model=model, sector=effective_sector,
                                 max_tokens=max_tokens, style_guide_text=style_guide_text,
-                                target=target)
+                                target=target, provider=prov)
         if effective_sector:
             result.setdefault("_detected_sector", effective_sector)
         return idx, result

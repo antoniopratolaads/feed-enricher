@@ -5,7 +5,7 @@ from utils.state import init_state
 from utils.ui import apply_theme
 from utils.config import (
     load_config, save_config, clear_config, mask_key,
-    test_anthropic, test_openai, CONFIG_FILE,
+    test_anthropic, test_openai, test_gemini, CONFIG_FILE,
 )
 
 init_state()
@@ -43,13 +43,15 @@ def _autosave(key: str, value):
 # STATUS PANEL
 # ============================================================
 st.markdown("### Stato configurazione")
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Provider attivo", cfg["provider"].title())
 c2.metric("Anthropic", "Configurato" if cfg["anthropic_api_key"] else "Non impostato",
           delta=mask_key(cfg["anthropic_api_key"]) if cfg["anthropic_api_key"] else None)
 c3.metric("OpenAI", "Configurato" if cfg["openai_api_key"] else "Non impostato",
           delta=mask_key(cfg["openai_api_key"]) if cfg["openai_api_key"] else None)
-c4.metric("Persistenza", "Su disco" if CONFIG_FILE.exists() else "Solo sessione")
+c4.metric("Gemini", "Configurato" if cfg.get("gemini_api_key") else "Non impostato",
+          delta=mask_key(cfg.get("gemini_api_key", "")) if cfg.get("gemini_api_key") else None)
+c5.metric("Persistenza", "Su disco" if CONFIG_FILE.exists() else "Solo sessione")
 
 st.divider()
 
@@ -59,11 +61,16 @@ st.divider()
 st.markdown("### Provider AI predefinito")
 st.caption("Quale provider usare per l'enrichment quando entrambi sono configurati")
 
+_provider_opts = ["anthropic", "openai", "gemini"]
 _provider = st.radio(
     "Provider",
-    options=["anthropic", "openai"],
-    index=0 if cfg["provider"] == "anthropic" else 1,
-    format_func=lambda x: {"anthropic": "Anthropic Claude (consigliato)", "openai": "OpenAI"}[x],
+    options=_provider_opts,
+    index=_provider_opts.index(cfg["provider"]) if cfg["provider"] in _provider_opts else 0,
+    format_func=lambda x: {
+        "anthropic": "Anthropic Claude (consigliato)",
+        "openai": "OpenAI",
+        "gemini": "Google Gemini",
+    }[x],
     horizontal=True,
     label_visibility="collapsed",
 )
@@ -74,7 +81,9 @@ st.divider()
 # ============================================================
 # TABS PER PROVIDER
 # ============================================================
-tab1, tab2, tab3, tab4 = st.tabs(["Anthropic Claude", "OpenAI", "Parametri & avanzate", "Prompt templates"])
+tab1, tab2, tab_gem, tab3, tab4 = st.tabs(
+    ["Anthropic Claude", "OpenAI", "Google Gemini", "Parametri & avanzate", "Prompt templates"]
+)
 
 with tab1:
     st.markdown("#### Anthropic Claude")
@@ -206,6 +215,73 @@ with tab2:
                 else:
                     st.error(f"Errore: {msg}")
 
+with tab_gem:
+    st.markdown("#### Google Gemini")
+    st.caption("Ottieni la chiave da [aistudio.google.com/apikey](https://aistudio.google.com/apikey) — formato `AIza...`")
+
+    key_col, status_col = st.columns([3, 1])
+    with key_col:
+        _gem_key = st.text_input(
+            "API Key Gemini",
+            value=cfg.get("gemini_api_key", ""),
+            type="password",
+            placeholder="AIza...",
+            key="gem_key",
+            help=(
+                "**Si salva automaticamente.**\n\n"
+                f"Percorso: `{CONFIG_FILE}` (permessi 600).\n\n"
+                "Usata per chiamate a generativelanguage.googleapis.com. "
+                "Env vars `GEMINI_API_KEY` o `GOOGLE_API_KEY` la sovrascrivono."
+            ),
+        )
+    _autosave("gemini_api_key", _gem_key)
+    with status_col:
+        st.markdown("<div style='height:26px;'></div>", unsafe_allow_html=True)
+        if cfg.get("gemini_api_key") and CONFIG_FILE.exists():
+            preview = mask_key(cfg["gemini_api_key"])
+            st.markdown(
+                f"<div style='background:#ECFDF5; border:1px solid #A7F3D0;"
+                f"border-radius:8px; padding:6px 10px; font-size:0.78rem; color:#065F46;'>"
+                f"<b>✓ Salvata su disco</b><br>"
+                f"<span style='color:#047857; font-family:monospace; font-size:0.72rem;'>{preview}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='background:#FEF3C7; border:1px solid #F59E0B;"
+                "border-radius:8px; padding:6px 10px; font-size:0.78rem; color:#92400E;'>"
+                "○ Non salvata</div>",
+                unsafe_allow_html=True,
+            )
+
+    _gem_models = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    _gem_current = cfg.get("gemini_model", "gemini-2.5-flash")
+    _gem_model = st.selectbox(
+        "Modello",
+        options=_gem_models,
+        index=_gem_models.index(_gem_current) if _gem_current in _gem_models else 1,
+        help=(
+            "**Flash** = default consigliato (qualità/prezzo ottimo, $0.30/$2.50 per M tok). "
+            "**Flash-Lite** = economico bulk (~12× più economico di Haiku 4.5). "
+            "**Pro** = reasoning top, context 1M."
+        ),
+    )
+    _autosave("gemini_model", _gem_model)
+
+    cc1, cc2 = st.columns([1, 3])
+    if cc1.button("Test connessione", key="test_gem", use_container_width=True):
+        if not cfg.get("gemini_api_key"):
+            cc2.warning("Inserisci prima la API key")
+        else:
+            with cc2:
+                with st.spinner("Test in corso..."):
+                    ok, msg = test_gemini(cfg["gemini_api_key"], cfg["gemini_model"])
+                if ok:
+                    st.success(f"Connessione OK · {msg}")
+                else:
+                    st.error(f"Errore: {msg}")
+
 with tab3:
     st.markdown("#### Parametri di generazione")
 
@@ -263,7 +339,7 @@ with tab3:
 
     st.markdown("#### Variabili d'ambiente (opzionali)")
     st.caption("Se imposti queste env vars all'avvio dell'app, sovrascrivono le chiavi salvate:")
-    st.code("export ANTHROPIC_API_KEY='sk-ant-...'\nexport OPENAI_API_KEY='sk-proj-...'", language="bash")
+    st.code("export ANTHROPIC_API_KEY='sk-ant-...'\nexport OPENAI_API_KEY='sk-proj-...'\nexport GEMINI_API_KEY='AIza...'", language="bash")
 
 with tab4:
     from utils import prompts as _prompts

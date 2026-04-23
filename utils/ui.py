@@ -704,7 +704,7 @@ def api_key_banner():
     - renders nothing when key is present.
     """
     cfg = st.session_state.get("config", {}) or {}
-    has_key = bool(cfg.get("anthropic_api_key") or cfg.get("openai_api_key"))
+    has_key = bool(cfg.get("anthropic_api_key") or cfg.get("openai_api_key") or cfg.get("gemini_api_key"))
     if has_key:
         return
     st.markdown(
@@ -712,7 +712,7 @@ def api_key_banner():
         "border-left:4px solid #F59E0B; padding:14px 18px; border-radius:12px; "
         "margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; gap:16px;'>"
         "<div><strong style='color:#92400E;'>API key mancante</strong> "
-        "<span style='color:#78350F;'>— l'enrichment AI richiede una chiave Claude o OpenAI. "
+        "<span style='color:#78350F;'>— l'enrichment AI richiede una chiave Claude, OpenAI o Gemini. "
         "Vai su Settings per configurarla.</span></div>"
         "</div>",
         unsafe_allow_html=True,
@@ -894,6 +894,11 @@ _PRICES = {
     "o3":                        {"input": 2.00,  "output": 8.00,  "tier": 5, "family": "openai"},
     "o3-mini":                   {"input": 0.50,  "output": 2.00,  "tier": 4, "family": "openai"},
     "o4-mini":                   {"input": 1.10,  "output": 4.40,  "tier": 4, "family": "openai"},
+
+    # ===== Google Gemini 2.5 family =====
+    "gemini-2.5-pro":            {"input": 1.25,  "output": 10.00, "tier": 5, "family": "gemini"},
+    "gemini-2.5-flash":          {"input": 0.30,  "output": 2.50,  "tier": 4, "family": "gemini"},
+    "gemini-2.5-flash-lite":     {"input": 0.10,  "output": 0.40,  "tier": 3, "family": "gemini"},
 
     # ===== Legacy =====
     "gpt-4-turbo":               {"input": 10.00, "output": 30.00, "tier": 4, "family": "openai"},
