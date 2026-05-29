@@ -99,37 +99,92 @@ with fc2:
         st.session_state["_show_add_feed"] = True
 
 if st.session_state.get("_show_add_feed"):
-    with st.form("_add_feed_form"):
-        nf_name = st.text_input("Nome feed", placeholder="Es. catalogo-principale, outlet, b2b")
-        nf_url = st.text_input("URL sorgente (opz.)",
-                                placeholder="https://...products.xml")
-        nf_type = st.selectbox("Tipo sorgente", ["url", "upload", "shopify", "custom"])
-        nf_strategy = st.selectbox(
-            "Strategia identificazione prodotto",
-            ["hierarchical", "id", "gtin", "mpn", "hash"],
-            help=(
-                "Come identificare lo 'stesso prodotto' tra sync diversi.\n"
-                "- hierarchical (consigliato): id → gtin → mpn → hash(title+brand+price)\n"
-                "- id: usa solo SKU dal feed\n"
-                "- gtin / mpn: usa solo quello (attento a GTIN mancanti)\n"
-                "- hash: sempre hash su title+brand+price"
-            ),
-        )
-        nf_notes = st.text_area("Note (opz.)")
-        cc1, cc2 = st.columns(2)
-        submit = cc1.form_submit_button("Crea feed", type="primary")
-        cancel = cc2.form_submit_button("Annulla")
-        if submit and nf_name.strip():
+    st.markdown("#### Crea nuovo feed + primo snapshot")
+    st.caption(
+        "Inserisci nome feed. Poi scegli sorgente: URL (scarica e processa) "
+        "oppure upload file (XML/CSV/TSV/JSON/XLSX). Il primo snapshot viene salvato automaticamente."
+    )
+    nf_name = st.text_input("Nome feed", placeholder="Es. catalogo-principale, outlet, b2b",
+                              key="_nf_name")
+    nf_strategy = st.selectbox(
+        "Strategia identificazione prodotto",
+        ["hierarchical", "id", "gtin", "mpn", "hash"],
+        key="_nf_strategy",
+        help=(
+            "Come identificare lo 'stesso prodotto' tra sync diversi.\n"
+            "- hierarchical (consigliato): id → gtin → mpn → hash(title+brand+price)\n"
+            "- id: usa solo SKU\n"
+            "- gtin / mpn: usa solo quello\n"
+            "- hash: sempre hash su title+brand+price"
+        ),
+    )
+    nf_notes = st.text_area("Note (opz.)", key="_nf_notes")
+
+    src_tab1, src_tab2 = st.tabs(["🌐 Da URL", "📁 Da file"])
+
+    with src_tab1:
+        nf_url = st.text_input("URL del feed",
+                                 placeholder="https://store.com/products.xml",
+                                 key="_nf_url")
+        if st.button("Crea feed + scarica", type="primary",
+                       disabled=not (nf_name.strip() and nf_url.strip()),
+                       key="_nf_submit_url"):
             try:
-                slug = cs.create_feed(current_slug, nf_name, nf_url, nf_type, nf_strategy, nf_notes)
+                slug = cs.create_feed(current_slug, nf_name, nf_url, "url",
+                                       nf_strategy, nf_notes)
+                with st.spinner("Download feed..."):
+                    raw = load_feed(nf_url)
+                    parsed = normalize_columns(raw)
+                    cs.save_snapshot(current_slug, slug, parsed)
                 st.session_state["_show_add_feed"] = False
-                st.success(f"Feed creato: {slug}")
+                st.session_state["_active_feed_choice"] = slug
+                st.success(f"✅ Feed '{nf_name}' creato · {len(parsed)} prodotti caricati")
                 st.rerun()
             except (FileExistsError, ValueError, FileNotFoundError) as e:
                 st.error(str(e))
-        if cancel:
-            st.session_state["_show_add_feed"] = False
-            st.rerun()
+            except Exception as e:
+                import traceback
+                st.error(f"Errore: {type(e).__name__}: {e}")
+                with st.expander("Debug"):
+                    st.code(traceback.format_exc())
+
+    with src_tab2:
+        nf_file = st.file_uploader(
+            "File feed (XML / CSV / TSV / JSON / XLSX)",
+            type=["xml", "csv", "tsv", "json", "xlsx"],
+            key="_nf_file",
+        )
+        if st.button("Crea feed + carica file", type="primary",
+                       disabled=not (nf_name.strip() and nf_file is not None),
+                       key="_nf_submit_file"):
+            try:
+                slug = cs.create_feed(current_slug, nf_name, "", "upload",
+                                       nf_strategy, nf_notes)
+                with st.spinner("Parsing file..."):
+                    raw_bytes = nf_file.read()
+                    if not raw_bytes:
+                        st.error("File vuoto.")
+                    else:
+                        raw = load_feed(raw_bytes, filename=nf_file.name)
+                        parsed = normalize_columns(raw)
+                        cs.save_snapshot(current_slug, slug, parsed)
+                        st.session_state["_show_add_feed"] = False
+                        st.session_state["_active_feed_choice"] = slug
+                        st.success(
+                            f"✅ Feed '{nf_name}' creato · {len(parsed)} prodotti caricati"
+                        )
+                        st.rerun()
+            except (FileExistsError, ValueError, FileNotFoundError) as e:
+                st.error(str(e))
+            except Exception as e:
+                import traceback
+                st.error(f"Errore: {type(e).__name__}: {e}")
+                with st.expander("Debug"):
+                    st.code(traceback.format_exc())
+
+    if st.button("Annulla", key="_nf_cancel"):
+        st.session_state["_show_add_feed"] = False
+        st.rerun()
 
 if not feeds:
     st.info("Nessun feed per questo cliente. Crea il primo con 'Aggiungi feed'.")
@@ -217,14 +272,20 @@ with sync_tab2:
     if uploaded and st.button("Processa file", type="primary", key="_proc_file"):
         with st.spinner("Parsing..."):
             try:
-                import io
-                raw = load_feed(io.BytesIO(uploaded.read()), filename=uploaded.name)
-                new_df = normalize_columns(raw)
-                st.session_state["_pending_new_df"] = new_df
-                st.success(f"File processato · {len(new_df)} prodotti")
-                st.rerun()
-            except Exception as e:  # noqa
-                st.error(f"Errore parsing: {e}")
+                raw_bytes = uploaded.read()
+                if not raw_bytes:
+                    st.error("File vuoto.")
+                else:
+                    raw = load_feed(raw_bytes, filename=uploaded.name)
+                    new_df = normalize_columns(raw)
+                    st.session_state["_pending_new_df"] = new_df
+                    st.success(f"File processato · {len(new_df)} prodotti")
+                    st.rerun()
+            except Exception as e:
+                import traceback
+                st.error(f"Errore parsing: {type(e).__name__}: {e}")
+                with st.expander("Debug traceback"):
+                    st.code(traceback.format_exc())
 
 # ============================================================
 # DELTA VIEW — quando c'è un nuovo df da confrontare

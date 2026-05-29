@@ -27,12 +27,11 @@ if "config" not in st.session_state:
 client_pages = [
     st.Page("client_pages/home.py",            title="Home",                icon=":material/home:", default=True),
     st.Page("client_pages/come_funziona.py",   title="Come funziona",       icon=":material/menu_book:"),
-    st.Page("client_pages/wizard.py",          title="Wizard Enrichment",   icon=":material/auto_awesome:"),
+    st.Page("client_pages/clienti.py",         title="Clienti & Feed",      icon=":material/groups:"),
     st.Page("client_pages/upload_feed.py",     title="Upload Feed",         icon=":material/upload_file:"),
     st.Page("client_pages/enrichment_ai.py",   title="Enrichment AI",       icon=":material/bolt:"),
-    st.Page("client_pages/scarica_catalogo.py", title="Scarica Catalogo",   icon=":material/download:"),
-    st.Page("client_pages/clienti.py",         title="Clienti",             icon=":material/groups:"),
-    st.Page("client_pages/progetti.py",        title="Progetti",            icon=":material/folder:"),
+    st.Page("client_pages/refine_chat.py",     title="Refine & Chat",       icon=":material/auto_fix:"),
+    st.Page("client_pages/scarica_catalogo.py", title="Catalog Optimizer",  icon=":material/download:"),
     st.Page("client_pages/settings.py",        title="Settings",            icon=":material/settings:"),
 ]
 

@@ -60,19 +60,35 @@ def supplemental_feed(
 
 
 def to_gmc_xml(df: pd.DataFrame, title: str = "Supplemental Feed") -> str:
-    """Converte un dataframe in RSS 2.0 GMC-compatible."""
-    items = []
-    for _, row in df.iterrows():
-        children = []
+    """Converte un dataframe in RSS 2.0 GMC-compatible (vettorizzato)."""
+    if len(df) == 0:
+        body = ""
+    else:
+        # Pre-stringify colonna per colonna (vectorizzato) + pre-escape.
+        col_frames: dict[str, pd.Series] = {}
         for col in df.columns:
-            val = row[col]
-            if pd.isna(val) or str(val).strip() == "":
-                continue
-            tag = col if col == "id" else col
-            children.append(f"    <g:{tag}>{escape(str(val))}</g:{tag}>")
-        items.append("  <item>\n" + "\n".join(children) + "\n  </item>")
+            s = df[col]
+            s_str = s.where(s.notna(), "").astype(str).str.strip()
+            s_str = s_str.mask(s_str.str.lower().isin(["nan", "none", "null"]), "")
+            col_frames[col] = s_str
 
-    body = "\n".join(items)
+        # Costruzione per-riga con join (evita apply di pd.isna / escape riga per riga)
+        items = []
+        append = items.append
+        cols = list(df.columns)
+        col_values = {c: col_frames[c].tolist() for c in cols}
+        n = len(df)
+        for i in range(n):
+            parts = []
+            p_append = parts.append
+            for c in cols:
+                v = col_values[c][i]
+                if not v:
+                    continue
+                p_append(f"    <g:{c}>{escape(v)}</g:{c}>")
+            append("  <item>\n" + "\n".join(parts) + "\n  </item>")
+        body = "\n".join(items)
+
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
 <channel>

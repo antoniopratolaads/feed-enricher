@@ -1,19 +1,15 @@
-"""Pagina 4: Enrichment AI via Claude (taxonomy + attributi + titoli) + Chat refinement."""
+"""Enrichment AI — selezione + lancio. Refinement/chat → client_pages/refine_chat.py."""
 import streamlit as st
 import pandas as pd
-from anthropic import Anthropic
 
 from utils.state import init_state
 from utils.ui import (
     apply_theme, api_key_banner, empty_state, guarded,
-    cost_estimate_card, cost_projection_table, diff_view, LoadingProgress,
+    cost_estimate_card, cost_projection_table, LoadingProgress,
 )
-from utils.enrichment import (
-    enrich_dataframe, refine_product, chat_about_data, DEFAULT_MODEL,
-    list_sectors, load_sector,
-)
-from utils.exporter import to_excel_bytes
+from utils.enrichment import enrich_dataframe, list_sectors, load_sector
 from utils import cache as enrich_cache
+from utils import clients as _cs
 
 init_state()
 apply_theme()
@@ -21,6 +17,139 @@ api_key_banner()
 
 st.title("Enrichment AI")
 st.caption("Classificazione Google Taxonomy + estrazione attributi + riscrittura titoli/descrizioni · Chat con Claude per affinare")
+
+# ============================================================
+# CLIENT + FEED SELECTOR — banner in alto.
+# Permette di scegliere cliente/feed attivo e caricarne snapshot
+# (preferendo enriched.parquet se esiste).
+# ============================================================
+_all_clients = _cs.list_clients()
+
+
+def _load_feed_from_client(client_slug: str, feed_slug: str) -> tuple[pd.DataFrame | None, str]:
+    """Carica feed attivo. Preferisce enriched.parquet, fallback snapshot più recente."""
+    enr = _cs.load_enriched(client_slug, feed_slug)
+    if enr is not None and not enr.empty:
+        return enr, "enriched"
+    snap = _cs.get_latest_snapshot(client_slug, feed_slug)
+    if snap is not None and not snap.empty:
+        return snap, "snapshot"
+    return None, ""
+
+
+with st.container():
+    st.markdown(
+        "<div style='background:#F4F5F7; border:1px solid #E5E7EB; border-radius:12px; "
+        "padding:14px 16px; margin:6px 0 18px;'>"
+        "<div style='font-size:0.78rem; color:#6B7280; font-weight:600; "
+        "text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px;'>"
+        "◐&nbsp;&nbsp;Contesto cliente</div></div>",
+        unsafe_allow_html=True,
+    )
+    if not _all_clients:
+        st.info(
+            "Nessun cliente salvato. Crea il primo dalla pagina **Clienti & Feed** "
+            "per tracciare feed multipli per cliente."
+        )
+        if st.button("→ Vai a Clienti & Feed", key="_goto_clients", use_container_width=True):
+            st.switch_page("client_pages/clienti.py")
+    else:
+        _slug_to_name = {c["slug"]: c.get("name", c["slug"]) for c in _all_clients}
+        _client_slugs = list(_slug_to_name.keys())
+
+        # default: active client in session, or most-recent
+        default_client = st.session_state.get("_active_client_choice") or _client_slugs[0]
+        if default_client not in _client_slugs:
+            default_client = _client_slugs[0]
+
+        sel1, sel2, sel3 = st.columns([2, 2, 1.2])
+        chosen_client = sel1.selectbox(
+            "Cliente",
+            options=_client_slugs,
+            index=_client_slugs.index(default_client),
+            format_func=lambda s: _slug_to_name.get(s, s),
+            key="_active_client_choice",
+        )
+
+        _feeds = _cs.list_feeds(chosen_client)
+        if not _feeds:
+            sel2.selectbox("Feed", options=["(nessun feed)"], disabled=True,
+                            key="_enrich_feed_empty")
+            sel3.write("")
+            st.caption(
+                f"Cliente **{_slug_to_name[chosen_client]}** non ha feed. "
+                "Aggiungine uno da **Clienti & Feed**."
+            )
+        else:
+            _feed_slug_to_name = {f["slug"]: f.get("name", f["slug"]) for f in _feeds}
+            _feed_slugs = list(_feed_slug_to_name.keys())
+            # default: sessione o primo
+            default_feed = st.session_state.get("_active_feed_choice") or _feed_slugs[0]
+            if default_feed not in _feed_slugs:
+                default_feed = _feed_slugs[0]
+
+            chosen_feed = sel2.selectbox(
+                "Feed",
+                options=_feed_slugs,
+                index=_feed_slugs.index(default_feed),
+                format_func=lambda s: _feed_slug_to_name.get(s, s),
+                key="_active_feed_choice",
+            )
+
+            # Info feed selezionato
+            _fmeta = next((f for f in _feeds if f["slug"] == chosen_feed), {})
+            _enr_preview = _cs.load_enriched(chosen_client, chosen_feed)
+            _snap_count = _fmeta.get("n_snapshots", 0)
+            _pending_count = _fmeta.get("n_pending", 0)
+            _has_enriched = _enr_preview is not None and not _enr_preview.empty
+            _n_rows_available = len(_enr_preview) if _has_enriched else (
+                len(_cs.get_latest_snapshot(chosen_client, chosen_feed) or [])
+            )
+
+            # CTA carica
+            with sel3:
+                st.write("")  # align
+                load_clicked = st.button(
+                    f"📥 Carica",
+                    key="_load_feed_btn",
+                    use_container_width=True,
+                    type="primary",
+                    disabled=(_n_rows_available == 0),
+                    help="Carica questo feed come dataset attivo (sostituisce quello in sessione).",
+                )
+
+            # stato attuale vs selezionato
+            _current_bound = (
+                st.session_state.get("_enrich_client_slug") == chosen_client
+                and st.session_state.get("_enrich_feed_slug") == chosen_feed
+                and st.session_state.get("feed_df") is not None
+            )
+            _status_line = (
+                f"**{_slug_to_name[chosen_client]}** · feed **{_feed_slug_to_name[chosen_feed]}** · "
+                f"{_n_rows_available:,} prodotti disponibili · "
+                f"{_snap_count} snapshot · {_pending_count} pending · "
+                + ("🟢 Caricato in sessione" if _current_bound else "⚪ Non caricato")
+            )
+            st.caption(_status_line)
+
+            if load_clicked:
+                loaded_df, source = _load_feed_from_client(chosen_client, chosen_feed)
+                if loaded_df is None:
+                    st.error("Nessun snapshot/enriched disponibile per questo feed.")
+                else:
+                    st.session_state["feed_df"] = loaded_df
+                    st.session_state["enriched_df"] = loaded_df.copy()
+                    st.session_state["merged_df"] = None
+                    st.session_state["_enrich_client_slug"] = chosen_client
+                    st.session_state["_enrich_feed_slug"] = chosen_feed
+                    _cs.touch_client(chosen_client)
+                    st.toast(
+                        f"Feed {_feed_slug_to_name[chosen_feed]} caricato "
+                        f"({len(loaded_df):,} prodotti · da {source})",
+                        icon="📥",
+                    )
+                    st.rerun()
+
 
 if st.session_state.get("feed_df") is None:
     empty_state(
@@ -70,7 +199,7 @@ mc[2].metric("Da arricchire", f"{n_todo:,}", help="Non arricchiti o con errore")
 st.markdown("### Seleziona prodotti da arricchire")
 st.caption(
     "Usa i filtri per restringere, poi spunta i prodotti. "
-    "Le **Opzioni avanzate** in fondo controllano modello/settore/target."
+    "La configurazione AI è sotto la tabella."
 )
 
 # ============================================================
@@ -246,34 +375,43 @@ else:
     )
 
 # ============================================================
-# OPZIONI AVANZATE
+# CONFIGURAZIONE — sempre visibile (modello, settore, target)
 # ============================================================
-with st.expander("⚙️ Opzioni avanzate (modello, settore, target)", expanded=False):
-    ac1, ac2, ac3 = st.columns(3)
-    _ALL_MODELS = [
-        "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
-        "claude-haiku-3-5", "gpt-5", "gpt-5-mini", "gpt-5-nano",
-        "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini",
-        "o3", "o3-mini", "o4-mini",
-    ]
-    model = ac1.selectbox("Modello AI", _ALL_MODELS,
-                           index=_ALL_MODELS.index("claude-sonnet-4-6"),
-                           help="Default Sonnet 4.6. Economia: Haiku / gpt-4.1-nano.")
+st.markdown("### ⚙️ Configurazione enrichment")
+st.caption("Scelte che impattano costo e qualità output.")
 
-    sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
-    default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
-    sector_choice = ac2.selectbox("Settore best practice", sectors, index=default_idx)
-    sector = "" if sector_choice == "(generico)" else \
-             ("auto" if sector_choice.startswith("✨ auto") else sector_choice)
+cfg1, cfg2, cfg3 = st.columns(3)
+_ALL_MODELS = [
+    "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
+    "claude-haiku-3-5", "gpt-5", "gpt-5-mini", "gpt-5-nano",
+    "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini",
+    "o3", "o3-mini", "o4-mini",
+]
+model = cfg1.selectbox(
+    "🤖 Modello AI", _ALL_MODELS,
+    index=_ALL_MODELS.index("claude-sonnet-4-6"),
+    help="Sonnet 4.6 = sweet spot (€3-15/M tok). Haiku 4.5 / gpt-4.1-nano = economici.",
+)
+sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
+default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
+sector_choice = cfg2.selectbox(
+    "📚 Settore best practice", sectors, index=default_idx,
+    help="Applica regole settoriali dal YAML (formula titolo, tono, parole vietate). "
+         "'auto' = detecta per-prodotto.",
+)
+sector = "" if sector_choice == "(generico)" else \
+         ("auto" if sector_choice.startswith("✨ auto") else sector_choice)
+target_choice = cfg3.radio(
+    "🎯 Target", options=["both", "google", "meta"],
+    format_func=lambda v: {"both": "🛒📘 Entrambi",
+                             "google": "🛒 Solo Google",
+                             "meta": "📘 Solo Meta"}[v],
+    horizontal=True,
+    help="Scegli se arricchire anche i campi Meta-only (risparmio ~15% se solo Google).",
+)
 
-    target_choice = ac3.radio(
-        "Target", options=["both", "google", "meta"],
-        format_func=lambda v: {"both": "🛒📘 Entrambi",
-                                 "google": "🛒 Solo Google",
-                                 "meta": "📘 Solo Meta"}[v],
-        horizontal=True,
-    )
-
+# Avanzate (parallelismo, cache, style guide) — in expander
+with st.expander("⚙️ Opzioni avanzate", expanded=False):
     ac4, ac5, ac6 = st.columns(3)
     workers = ac4.slider("Parallelismo", 1, 15, 5,
                           help="Chiamate API simultanee. 5 = sweet spot.")
@@ -282,7 +420,6 @@ with st.expander("⚙️ Opzioni avanzate (modello, settore, target)", expanded=
     use_cache = ac6.checkbox("Usa cache hash", value=True,
                                help="Riusa enrichment invariato (hash contenuto prodotto).")
 
-    # Style guide
     from utils import catalog_style
     _style_ns = f"session_{st.session_state.get('session_id', 'default')}"
     existing_guide = catalog_style.load_guide(_style_ns)
@@ -290,8 +427,7 @@ with st.expander("⚙️ Opzioni avanzate (modello, settore, target)", expanded=
     use_style_guide = sg1.checkbox(
         "🧭 Style guide catalogo (coerenza cross-prodotto)",
         value=bool(existing_guide),
-        help="Analizza campione catalogo → estrae formula titolo / tono / vocabolario. "
-             "Iniettato in ogni prompt. ~€0.01 una volta.",
+        help="Analizza campione → estrae formula/tono/vocabolario. ~€0.01 una volta.",
     )
     style_guide_text = ""
     if use_style_guide:
@@ -436,479 +572,54 @@ if enriched is None:
     st.stop()
 
 # ============================================================
-# RISULTATI
+# RISULTATI — minimalista con CTA verso Refine e Catalog Optimizer
 # ============================================================
-st.divider()
+ok = int((enriched.get("_enrichment_status", pd.Series()).astype(str) == "ok").sum())
+cached_n = int((enriched.get("_enrichment_status", pd.Series()).astype(str) == "cached").sum())
+errors = int(enriched.get("_enrichment_status", pd.Series()).astype(str).str.startswith("error").sum())
+empty_n = int(len(enriched) - ok - cached_n - errors)
 
-# ============================================================
-# AZIONI POST-ENRICHMENT (undo + diff preview toggle)
-# ============================================================
-ac1, ac2, ac3 = st.columns([1, 1, 2])
-if ac1.button("↶ Undo enrichment",
-              help="Ripristina title/description originali dalle colonne _original",
-              use_container_width=True):
-    with guarded("undo enrichment"):
-        restored = enriched.copy()
-        for src, dst in (("title_original", "title"), ("description_original", "description")):
-            if src in restored.columns:
-                mask = restored[src].notna() & restored[src].astype(str).ne("")
-                restored.loc[mask, dst] = restored.loc[mask, src]
-        restored["_enrichment_status"] = "reverted"
-        st.session_state["enriched_df"] = restored
-        st.toast("Ripristinati i valori originali", icon="↶")
-        st.rerun()
+if ok + cached_n == 0:
+    st.info("Nessun prodotto arricchito ancora. Seleziona e clicca **🚀 Avvia enrichment** sopra.")
+    st.stop()
 
-show_diff = ac2.toggle("📊 Diff prima/dopo", value=False,
-                       help="Mostra confronto side-by-side tra originale e versione AI")
+st.subheader("✅ Risultati enrichment")
+rm1, rm2, rm3, rm4 = st.columns(4)
+rm1.metric("🟢 OK", ok)
+rm2.metric("🔵 Da cache", cached_n)
+rm3.metric("🔴 Errori", errors)
+rm4.metric("⚪ Vuoti/pending", empty_n)
 
-st.subheader("Risultati")
-ok = (enriched["_enrichment_status"] == "ok").sum()
-cached_n = (enriched["_enrichment_status"] == "cached").sum()
-errors = enriched["_enrichment_status"].astype(str).str.startswith("error").sum()
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("OK", int(ok))
-c2.metric("Da cache", int(cached_n))
-c3.metric("Errori", int(errors))
-c4.metric("Vuoti", len(enriched) - int(ok) - int(cached_n) - int(errors))
-
-# ============================================================
-# DOWNLOAD CATALOGO (in cima ai risultati - ben visibile)
-# ============================================================
-if int(ok) + int(cached_n) > 0:
-    from utils.catalog_optimizer import build_google_feed as _bgf, build_meta_feed as _bmf
+st.markdown("### Prossimi passi")
+ncs = st.columns(2)
+with ncs[0]:
     st.markdown(
-        "<div style='background:linear-gradient(135deg, #2F6FED 0%, #1A4BB5 100%); "
-        "border-radius:14px; padding:16px 20px; color:#fff; margin:10px 0 14px;'>"
-        "<div style='font-weight:700; font-size:1rem;'>📥 Scarica catalogo arricchito</div>"
-        "<div style='font-size:0.85rem; opacity:0.9; margin-top:4px;'>"
-        "TSV Google + CSV Meta pronti per upload diretto a Merchant Center / Commerce Manager."
+        "<div style='background:linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%); "
+        "border-radius:14px; padding:20px; color:#fff; height:100%;'>"
+        "<div style='font-weight:700; font-size:1rem; margin-bottom:6px;'>"
+        "✨ Refine & Chat</div>"
+        "<div style='font-size:0.85rem; opacity:0.9;'>"
+        "Affina titoli/descrizioni con istruzioni custom su sottoinsiemi. "
+        "Diff prima/dopo. Chat con Claude sul catalogo."
         "</div></div>",
         unsafe_allow_html=True,
     )
-    try:
-        _dl_google = _bgf(enriched, currency="EUR")
-        _dl_meta = _bmf(enriched, currency="EUR")
-        dlc1, dlc2, dlc3 = st.columns(3)
-        dlc1.download_button(
-            "⬇️ TSV Google (GMC-ready)",
-            _dl_google.to_csv(index=False, sep="\t").encode("utf-8"),
-            file_name="google_feed.tsv", mime="text/tab-separated-values",
-            use_container_width=True, type="primary",
-        )
-        dlc2.download_button(
-            "⬇️ CSV Meta (Commerce-ready)",
-            _dl_meta.to_csv(index=False).encode("utf-8"),
-            file_name="meta_feed.csv", mime="text/csv",
-            use_container_width=True, type="primary",
-        )
-        if dlc3.button("Vai a Catalog Optimizer →", use_container_width=True,
-                        key="_go_catalog_opt",
-                        help="Export avanzati: Excel, XML, validation report, delta diff, bundle ZIP"):
-            st.switch_page("client_pages/scarica_catalogo.py")
-    except Exception as _e:
-        st.warning(f"Errore build feed: {_e}")
+    if st.button("Apri Refine & Chat →", type="primary", use_container_width=True,
+                  key="_go_refine"):
+        st.switch_page("client_pages/refine_chat.py")
 
-# Diff preview for first N products that were actually modified
-if show_diff:
-    st.markdown("#### Anteprima diff (primi 10 prodotti modificati)")
-    if "title_original" not in enriched.columns:
-        st.caption("_Nessuna colonna `title_original` — l'enrichment non ha sovrascritto i titoli._")
-    else:
-        diffed = enriched[
-            enriched["title_original"].notna()
-            & (enriched["title"].astype(str) != enriched["title_original"].astype(str))
-        ].head(10)
-        if diffed.empty:
-            st.caption("_Nessun prodotto modificato in questo batch._")
-        for _, row in diffed.iterrows():
-            diff_view(
-                f"{row.get('id', '?')} · {row.get('brand', '')}".strip(" ·"),
-                row.get("title_original", ""),
-                row.get("title", ""),
-            )
-    st.divider()
-
-from utils.catalog_optimizer import GOOGLE_FIELDS, META_FIELDS
-
-tabs = st.tabs(["🛒 Variante Google", "📘 Variante Meta", "🏷️ Tutti gli attributi"])
-
-# Badge visivo per enrichment status — prima colonna nelle tab
-def _status_badge(s: str) -> str:
-    s = str(s).strip().lower()
-    if s == "ok":
-        return "🟢 OK"
-    if s == "cached":
-        return "🔵 Cache"
-    if s == "reverted":
-        return "↶ Undo"
-    if s.startswith("error"):
-        return "🔴 Errore"
-    if s.startswith("empty"):
-        return "🟡 Vuoto"
-    return "⚪ —"
-
-if "_enrichment_status" in enriched.columns:
-    enriched = enriched.copy()
-    enriched["✨ Stato"] = enriched["_enrichment_status"].apply(_status_badge)
-
-# Lista completa campi GMC ufficiali (ordine spec) — badge come prima colonna
-_google_order = ["✨ Stato", "id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"]
-google_cols = [c for c in _google_order if c in enriched.columns]
-# Solo campi popolati per non mostrare colonne tutte vuote
-google_cols = [c for c in google_cols
-               if c in ("✨ Stato", "id") or
-               enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
-
-# Lista completa campi Meta ufficiali — badge come prima colonna
-_meta_order = ["✨ Stato", "id"] + [t for t, _, _ in META_FIELDS if t != "id"]
-meta_cols = [c for c in _meta_order if c in enriched.columns]
-meta_cols = [c for c in meta_cols
-             if c in ("✨ Stato", "id") or
-             enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
-
-# Tutti gli attributi (compresi Meta extras + meta-internal)
-_all_order = ["✨ Stato", "id"] + [t for t, _, _, _ in GOOGLE_FIELDS if t != "id"] + \
-             [t for t, _, _ in META_FIELDS if t not in {x for x, _, _, _ in GOOGLE_FIELDS}]
-other_cols = [c for c in enriched.columns if c not in _all_order]
-all_cols = [c for c in _all_order if c in enriched.columns] + other_cols
-all_cols = [c for c in all_cols
-            if c in ("✨ Stato", "id") or
-            enriched[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
-
-# Column config sharing
-_col_cfg = {
-    "✨ Stato":               st.column_config.TextColumn("Enrichment", width="small",
-                                help="🟢 OK = processato ora · 🔵 Cache = da cache · "
-                                     "↶ Undo = ripristinato · 🔴 Errore · 🟡 Vuoto · ⚪ non arricchito"),
-    "title":                  st.column_config.TextColumn(width="large"),
-    "description":            st.column_config.TextColumn(width="large"),
-    "title_meta":             st.column_config.TextColumn("title_meta (Meta)", width="large"),
-    "short_description":      st.column_config.TextColumn("short_description (Meta)", width="medium"),
-    "rich_text_description":  st.column_config.TextColumn("rich_text_description (HTML)", width="large"),
-    "product_highlight":      st.column_config.TextColumn(width="large"),
-    "product_detail":         st.column_config.TextColumn(width="large"),
-    "google_product_category": st.column_config.TextColumn(width="medium"),
-    "product_type":           st.column_config.TextColumn(width="medium"),
-}
-
-with tabs[0]:
-    st.caption(
-        f"**{len(google_cols)-1}** campi GMC ufficiali popolati su {len([t for t,_,_,_ in GOOGLE_FIELDS])} disponibili. "
-        "Limiti: title ≤150 char, description ≤5000, product_highlight bullet ≤150 ciascuno."
+with ncs[1]:
+    st.markdown(
+        "<div style='background:linear-gradient(135deg, #2F6FED 0%, #1A4BB5 100%); "
+        "border-radius:14px; padding:20px; color:#fff; height:100%;'>"
+        "<div style='font-weight:700; font-size:1rem; margin-bottom:6px;'>"
+        "📥 Catalog Optimizer</div>"
+        "<div style='font-size:0.85rem; opacity:0.9;'>"
+        "Scarica feed GMC-ready + Meta Commerce. Validazione, quality check, "
+        "delta sync, bundle ZIP completo."
+        "</div></div>",
+        unsafe_allow_html=True,
     )
-    st.dataframe(
-        enriched[google_cols].head(100),
-        use_container_width=True, height=420,
-        column_config=_col_cfg,
-    )
-    with st.expander("ℹ️ Legenda campi Google (spec ufficiale 2026)"):
-        st.markdown(
-            "- **Obbligatori**: id, title, description, link, image_link, availability, price, condition, brand, google_product_category\n"
-            "- **Identità**: gtin, mpn, identifier_exists, item_group_id\n"
-            "- **Apparel**: gender, age_group, color, size, size_type, size_system, material, pattern\n"
-            "- **Bundle/multipack**: is_bundle, multipack\n"
-            "- **Prezzo**: sale_price, unit_pricing_measure, unit_pricing_base_measure, installment, subscription_cost, loyalty_points\n"
-            "- **Spedizione**: shipping_weight/length/width/height, shipping_label, ships_from_country, handling_time\n"
-            "- **Energia**: energy_efficiency_class + min/max\n"
-            "- **Highlights**: product_highlight (array ≤10 bullet), product_detail (structured section:name=value)\n"
-            "- **Certification**: array [{authority, name, code}] (EPREL, FSC, Bio, ...)\n"
-            "- **Media**: additional_image_link, lifestyle_image_link, video_link\n"
-            "- **Destinazione/tasse**: included_destination, excluded_destination, tax_category, promotion_id\n"
-            "- **Custom labels**: custom_label_0..4"
-        )
-
-with tabs[1]:
-    st.caption(
-        f"**{len(meta_cols)-1}** campi Meta Commerce ufficiali popolati su {len([t for t,_,_ in META_FIELDS])} disponibili. "
-        "Limiti: title ≤200, description ≤9999, short_description ≤200."
-    )
-    st.dataframe(
-        enriched[meta_cols].head(100),
-        use_container_width=True, height=420,
-        column_config=_col_cfg,
-    )
-    with st.expander("ℹ️ Legenda campi Meta Catalog"):
-        st.markdown(
-            "- **Obbligatori**: id, title, description, availability, condition, price, link, image_link, brand\n"
-            "- **Meta-only**: title_meta (diventa 'title' nel feed), short_description, rich_text_description (HTML), fb_product_category, origin_country\n"
-            "- **EU GPSR compliance**: manufacturer_info, manufacturer_part_number, importer_name, importer_address\n"
-            "- **Commerce**: commerce_tax_category, status (active/archived/staging)\n"
-            "- **Custom**: custom_label_0..4 + custom_number_0..4 (numeric per ranking)\n"
-            "- **Media**: video [{tag, url}] strutturato multi-video"
-        )
-
-with tabs[2]:
-    st.caption(f"Tutti i **{len(all_cols)-1}** attributi popolati (GMC + Meta + metadata interni).")
-    st.dataframe(
-        enriched[all_cols].head(100),
-        use_container_width=True, height=420,
-        column_config=_col_cfg,
-    )
-
-from utils.catalog_optimizer import build_google_feed, build_meta_feed
-
-st.markdown("#### Download")
-st.caption(
-    "**TSV Google / CSV Meta** = pronti per upload diretto. "
-    "**Raw** = dump completo per audit. Puoi escludere colonne specifiche prima dell'export."
-)
-
-# Build Google / Meta ready dataframes
-try:
-    _google_ready = build_google_feed(enriched, currency="EUR")
-except Exception as _e:
-    _google_ready = None
-    st.warning(f"Errore Google feed: {_e}")
-try:
-    _meta_ready = build_meta_feed(enriched, currency="EUR")
-except Exception as _e:
-    _meta_ready = None
-    st.warning(f"Errore Meta feed: {_e}")
-
-# Column exclusion UI
-with st.expander("🧹 Escludi colonne dall'export", expanded=False):
-    ex_cols_g = st.multiselect(
-        "Colonne da escludere dal TSV Google",
-        options=list(_google_ready.columns) if _google_ready is not None else [],
-        default=[],
-        key="_excl_google",
-    )
-    ex_cols_m = st.multiselect(
-        "Colonne da escludere dal CSV Meta",
-        options=list(_meta_ready.columns) if _meta_ready is not None else [],
-        default=[],
-        key="_excl_meta",
-    )
-    ex_cols_raw = st.multiselect(
-        "Colonne da escludere dal CSV raw",
-        options=list(enriched.columns),
-        default=[c for c in enriched.columns if c.startswith("_") or c.endswith("_original")],
-        key="_excl_raw",
-    )
-
-dc1, dc2, dc3, dc4 = st.columns(4)
-
-if _google_ready is not None:
-    _gdf = _google_ready.drop(columns=ex_cols_g, errors="ignore")
-    dc1.download_button(
-        "⬇️ TSV Google (GMC-ready)",
-        _gdf.to_csv(index=False, sep="\t").encode("utf-8"),
-        file_name="google_feed.tsv",
-        mime="text/tab-separated-values",
-        use_container_width=True,
-        help=f"{len(_gdf.columns)} colonne. Upload diretto su Google Merchant Center → Feed → Aggiungi → Carica TSV.",
-    )
-
-if _meta_ready is not None:
-    _mdf = _meta_ready.drop(columns=ex_cols_m, errors="ignore")
-    dc2.download_button(
-        "⬇️ CSV Meta (Commerce-ready)",
-        _mdf.to_csv(index=False).encode("utf-8"),
-        file_name="meta_feed.csv",
-        mime="text/csv",
-        use_container_width=True,
-        help=f"{len(_mdf.columns)} colonne. Upload diretto su Meta Commerce Manager → Cataloghi → Aggiungi prodotti → Da file di dati.",
-    )
-
-# Excel multi-foglio (no exclusion su Excel per semplicità)
-dc3.download_button(
-    "Excel arricchito",
-    to_excel_bytes({"enriched": enriched}),
-    "feed_enriched.xlsx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True,
-    help="Excel con tutti i dati arricchiti (raw, per audit).",
-)
-
-# CSV raw con esclusione
-_raw_df = enriched.drop(columns=ex_cols_raw, errors="ignore")
-dc4.download_button(
-    f"CSV raw ({len(_raw_df.columns)} col.)",
-    _raw_df.to_csv(index=False).encode("utf-8"),
-    "feed_enriched_raw.csv",
-    "text/csv",
-    use_container_width=True,
-    help="Default: esclude colonne interne (_*) e originali (_original). Personalizzabile sopra.",
-)
-
-# ============================================================
-# QUALITY — taxonomy suggestions + spell check
-# ============================================================
-with st.expander("🧭 Quality post-enrichment (taxonomy + spell check)", expanded=False):
-    qc1, qc2 = st.columns(2)
-
-    with qc1:
-        st.markdown("**Taxonomy autocomplete**")
-        st.caption("Suggerisce `google_product_category` via fuzzy match sulla tassonomia ufficiale Google.")
-        if st.button("Suggerisci categorie mancanti", key="_tax_suggest"):
-            from utils.taxonomy import suggest_bulk
-            missing = enriched[
-                enriched.get("google_product_category", "").astype(str).str.strip().eq("")
-            ].head(30)
-            if missing.empty:
-                st.info("Tutti i prodotti hanno già `google_product_category`.")
-            else:
-                with st.spinner(f"Matching su {len(missing)} prodotti..."):
-                    suggestions = suggest_bulk(
-                        missing["title"].fillna("").astype(str),
-                        missing.get("brand", "").fillna("").astype(str) if "brand" in missing.columns else [""] * len(missing),
-                    )
-                # Present table
-                rows = []
-                for (idx, row), sug in zip(missing.iterrows(), suggestions):
-                    rows.append({
-                        "id": row.get("id", ""),
-                        "title": str(row.get("title", ""))[:60],
-                        "suggerimento": sug["path"] if sug else "—",
-                        "score": sug["score"] if sug else 0,
-                        "_idx": idx,
-                    })
-                suggest_df = pd.DataFrame(rows)
-                st.dataframe(suggest_df.drop(columns=["_idx"]),
-                              use_container_width=True, height=320)
-
-                if st.button("Applica suggerimenti (score ≥ 60)", key="_tax_apply"):
-                    applied = 0
-                    for r in rows:
-                        if r["score"] >= 60 and r["suggerimento"] != "—":
-                            enriched.at[r["_idx"], "google_product_category"] = r["suggerimento"]
-                            applied += 1
-                    st.session_state["enriched_df"] = enriched
-                    st.success(f"Applicati {applied} suggerimenti.")
-                    st.rerun()
-
-    with qc2:
-        st.markdown("**Spell check italiano**")
-        st.caption("Flagga parole non riconosciute in `title` e `description` (possibili hallucinations).")
-        if st.button("Esegui spell check (primi 500)", key="_spell_run"):
-            from utils.spell_check import check_dataframe
-            with st.spinner("Analizzo testi..."):
-                issues = check_dataframe(enriched, cols=("title", "description"), limit=500)
-            if not issues:
-                st.success("Nessun errore rilevato (o dizionario IT non disponibile).")
-            else:
-                st.warning(f"{len(issues)} possibili errori trovati")
-                df_issues = pd.DataFrame([{
-                    "riga": i.row_idx,
-                    "campo": i.column,
-                    "parola": i.word,
-                    "suggerimento": i.suggestion or "—",
-                } for i in issues[:200]])
-                st.dataframe(df_issues, use_container_width=True, height=320)
-                if len(issues) > 200:
-                    st.caption(f"_Mostrati primi 200 su {len(issues)} totali._")
-
-# ============================================================
-# REFINEMENT — applica istruzione custom a un sottoinsieme
-# ============================================================
-st.divider()
-st.subheader("Affina i risultati con istruzioni custom")
-st.caption("Selezioni un sottoinsieme e dai a Claude un'istruzione (es. *titoli più aggressivi per i prodotti zombie*).")
-
-rc1, rc2, rc3 = st.columns([2, 2, 1])
-brand_filter = rc1.multiselect("Filtra per brand",
-                                options=sorted(enriched["brand"].dropna().unique()) if "brand" in enriched.columns else [])
-status_filter = rc2.multiselect("Filtra per status",
-                                 options=["ok", "empty", "error"], default=[])
-
-mask = pd.Series([True] * len(enriched), index=enriched.index)
-if brand_filter:
-    mask &= enriched["brand"].isin(brand_filter)
-if status_filter:
-    mask &= enriched["_enrichment_status"].astype(str).isin(status_filter) | \
-            enriched["_enrichment_status"].astype(str).str.startswith(tuple(status_filter))
-
-selected = enriched[mask]
-rc3.metric("Selezionati", len(selected))
-
-instruction = st.text_area(
-    "Istruzione per Claude",
-    placeholder="Es: rendi i titoli più orientati al beneficio. Aggiungi parole chiave search-friendly. "
-                "Massimo 100 caratteri. Mantieni il brand all'inizio.",
-    height=80,
-)
-
-rcc1, rcc2 = st.columns([1, 4])
-n_apply = rcc1.number_input("Max prodotti da aggiornare", 1, 500, min(20, len(selected)), 5,
-                              help="Limita per controllare costo")
-if rcc2.button("Applica refinement", type="primary", disabled=not instruction or not len(selected)):
-    client = Anthropic(api_key=st.session_state["api_key"])
-    progress = st.progress(0)
-    target = selected.head(n_apply)
-    updated = 0
-    for i, (idx, row) in enumerate(target.iterrows()):
-        result = refine_product(client, row.to_dict(), instruction, model=model)
-        if result and "_error" not in result:
-            for k in ("title", "description"):
-                if result.get(k):
-                    enriched.at[idx, k] = result[k]
-            updated += 1
-        progress.progress((i + 1) / len(target))
-    st.session_state["enriched_df"] = enriched
-    st.success(f"Aggiornati {updated}/{len(target)} prodotti")
-    st.rerun()
-
-# ============================================================
-# CHAT CON CLAUDE
-# ============================================================
-st.divider()
-st.subheader("💬 Chat con Claude sul tuo catalogo")
-st.caption("Chiedi consigli, idee di refinement, analisi delle label. Il contesto del catalogo è già caricato.")
-
-if "enrich_chat" not in st.session_state:
-    st.session_state["enrich_chat"] = []
-
-# pulsanti rapidi
-sug1, sug2, sug3, sug4 = st.columns(4)
-suggestions = {
-    sug1: "Quali brand hanno i titoli più poveri da migliorare?",
-    sug2: "Suggerisci 3 istruzioni di refinement per i prodotti senza vendite Shopify",
-    sug3: "Come dovrei impostare le custom_label per massimizzare ROAS?",
-    sug4: "Genera un'istruzione per riscrivere i titoli in stile premium",
-}
-for col, q in suggestions.items():
-    if col.button(q, use_container_width=True, key=f"sug_{hash(q)}"):
-        st.session_state["enrich_chat"].append({"role": "user", "content": q})
-        st.rerun()
-
-# render history
-for msg in st.session_state["enrich_chat"]:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-prompt = st.chat_input("Scrivi un messaggio a Claude...")
-if prompt:
-    st.session_state["enrich_chat"].append({"role": "user", "content": prompt})
-    st.rerun()
-
-# se l'ultimo è user, rispondi
-if st.session_state["enrich_chat"] and st.session_state["enrich_chat"][-1]["role"] == "user":
-    with st.chat_message("assistant"):
-        with st.spinner("Claude sta pensando..."):
-            # build context summary
-            ctx_lines = [f"Prodotti totali: {len(enriched)}"]
-            if "brand" in enriched.columns:
-                top_brands = enriched["brand"].value_counts().head(5).to_dict()
-                ctx_lines.append(f"Top brand: {top_brands}")
-            if "clicks" in enriched.columns:
-                roas = enriched["conv_value"].sum() / enriched["cost"].sum() if enriched["cost"].sum() else 0
-                ctx_lines.append(f"ROAS GAds: {roas:.2f}x · Spesa: €{enriched['cost'].sum():.0f}")
-                zombie = ((enriched["clicks"] >= 30) & (enriched["conversions"] == 0)).sum()
-                ctx_lines.append(f"Zombie: {zombie}")
-            if "shopify_units_sold" in enriched.columns:
-                no_sales = (enriched["shopify_units_sold"] == 0).sum()
-                ctx_lines.append(f"Senza vendite Shopify: {no_sales}")
-            if "title" in enriched.columns:
-                avg_len = enriched["title"].astype(str).str.len().mean()
-                ctx_lines.append(f"Lunghezza media title: {avg_len:.0f} char")
-            ctx = "\n".join(ctx_lines)
-
-            client = Anthropic(api_key=st.session_state["api_key"])
-            reply = chat_about_data(client, st.session_state["enrich_chat"], ctx, model=model)
-            st.markdown(reply)
-            st.session_state["enrich_chat"].append({"role": "assistant", "content": reply})
-
-cc1, cc2 = st.columns([1, 4])
-if cc1.button("Pulisci chat", use_container_width=True):
-    st.session_state["enrich_chat"] = []
-    st.rerun()
+    if st.button("Apri Catalog Optimizer →", type="primary", use_container_width=True,
+                  key="_go_catalog"):
+        st.switch_page("client_pages/scarica_catalogo.py")

@@ -14,7 +14,9 @@ Best practice titoli/descrizioni adottate (sintesi GMC + Meta + community):
 """
 from __future__ import annotations
 import pandas as pd
+import numpy as np
 import re
+import json as _json
 
 # ---------- Specifiche campi ----------
 
@@ -296,23 +298,22 @@ def _truncate(text: str, max_len: int) -> str:
 
 
 def _coalesce(row: pd.Series, cols: list[str]) -> str:
-    """Return first non-empty value from cols. Handles list/dict/NA safely."""
+    """Return first non-empty value from cols. Handles list/dict/NA safely.
+
+    Kept for backward-compat. Vectorized fast path: use _coalesce_vec.
+    """
     for c in cols:
         if c not in row.index:
             continue
         v = row[c]
-        # Liste / array / dict: vuoti → skip, pieni → serializza JSON
         if isinstance(v, (list, tuple)):
             if len(v) == 0:
                 continue
-            import json as _json
-            return _json.dumps(v, ensure_ascii=False)
+            return _json.dumps(list(v), ensure_ascii=False)
         if isinstance(v, dict):
             if not v:
                 continue
-            import json as _json
             return _json.dumps(v, ensure_ascii=False)
-        # Scalare: check NA
         try:
             if pd.isna(v):
                 continue
@@ -324,13 +325,73 @@ def _coalesce(row: pd.Series, cols: list[str]) -> str:
     return ""
 
 
+_INVALID_TOKENS = {"", "nan", "none", "null", "<na>"}
+
+
+def _series_to_clean_str(s: pd.Series) -> pd.Series:
+    """Vectorized: Series → stripped string, empty for NA/placeholder values.
+
+    Handles object columns with occasional list/dict entries by JSON-encoding them.
+    """
+    # Detect object dtype with container entries — fall back to apply only for those
+    if s.dtype == object:
+        has_container = False
+        for v in s.values[:min(len(s), 64)]:  # sample check
+            if isinstance(v, (list, tuple, dict)):
+                has_container = True
+                break
+        if has_container:
+            def _one(v):
+                if isinstance(v, (list, tuple)):
+                    return _json.dumps(list(v), ensure_ascii=False) if len(v) else ""
+                if isinstance(v, dict):
+                    return _json.dumps(v, ensure_ascii=False) if v else ""
+                if v is None:
+                    return ""
+                try:
+                    if pd.isna(v):
+                        return ""
+                except (TypeError, ValueError):
+                    pass
+                return str(v).strip()
+            out = s.map(_one).astype(object)
+        else:
+            out = s.where(s.notna(), "").astype(str).str.strip()
+    else:
+        out = s.where(s.notna(), "").astype(str).str.strip()
+
+    # Mask placeholders
+    lower = out.str.lower()
+    out = out.mask(lower.isin(_INVALID_TOKENS), "")
+    return out
+
+
+def _coalesce_vec(df: pd.DataFrame, cols: list[str]) -> pd.Series:
+    """Vectorized coalesce across priority columns. Returns Series of stripped strings."""
+    out = pd.Series("", index=df.index, dtype=object)
+    if not cols:
+        return out
+    empty_mask = out.eq("")
+    for c in cols:
+        if c not in df.columns:
+            continue
+        if not empty_mask.any():
+            break
+        cand = _series_to_clean_str(df[c])
+        fill = empty_mask & cand.ne("")
+        if fill.any():
+            out = out.mask(fill, cand)
+            empty_mask = out.eq("")
+    return out
+
+
 def build_google_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
     """Genera DataFrame conforme a Google Merchant Center con normalizzazioni."""
     out = pd.DataFrame(index=df.index)
     for target, sources, _, _ in GOOGLE_FIELDS:
         if target == "identifier_exists":
             continue
-        out[target] = df.apply(lambda r: _coalesce(r, sources), axis=1) if sources else ""
+        out[target] = _coalesce_vec(df, sources) if sources else ""
 
     # normalizzazioni
     out["availability"] = out["availability"].map(_normalize_availability)
@@ -341,10 +402,9 @@ def build_google_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
     out["title"] = out["title"].map(lambda v: _truncate(v, 150))
     # description 500-5000
     out["description"] = out["description"].map(lambda v: _truncate(v, 5000))
-    # identifier_exists
-    out["identifier_exists"] = out.apply(
-        lambda r: "no" if not r["gtin"] and not r["mpn"] else "yes", axis=1
-    )
+    # identifier_exists — vectorizzato
+    has_id = out["gtin"].astype(str).str.strip().ne("") | out["mpn"].astype(str).str.strip().ne("")
+    out["identifier_exists"] = np.where(has_id, "yes", "no")
     # column order
     cols = [t for t, _, _, _ in GOOGLE_FIELDS]
     out = out[cols]
@@ -366,7 +426,7 @@ def build_meta_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
         if not srcs:
             out[target] = ""
             continue
-        out[target] = df.apply(lambda r: _coalesce(r, srcs), axis=1)
+        out[target] = _coalesce_vec(df, srcs)
 
     # Normalizzazioni (stessa logica di Google dove applicabile)
     out["availability"] = out["availability"].map(_normalize_availability)

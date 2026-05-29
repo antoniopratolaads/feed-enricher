@@ -17,11 +17,18 @@ if not exist .venv\Scripts\python.exe (
 echo.
 echo ============================================
 echo   Feed Enricher Pro — Dev Server
-echo   http://localhost:8501
+echo   http://localhost:8502
 echo   Ctrl+C per fermare
 echo ============================================
 echo.
 
-.venv\Scripts\python.exe -m streamlit run app.py --server.runOnSave true --browser.gatherUsageStats false
+REM Skip email prompt primo avvio
+if not exist "%USERPROFILE%\.streamlit" mkdir "%USERPROFILE%\.streamlit"
+if not exist "%USERPROFILE%\.streamlit\credentials.toml" (
+    > "%USERPROFILE%\.streamlit\credentials.toml" echo [general]
+    >> "%USERPROFILE%\.streamlit\credentials.toml" echo email = ""
+)
+
+.venv\Scripts\python.exe -m streamlit run app.py --server.port 8502 --server.runOnSave true --server.headless true --browser.gatherUsageStats false
 
 pause

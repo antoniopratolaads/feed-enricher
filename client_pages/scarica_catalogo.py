@@ -18,6 +18,56 @@ apply_theme()
 import zipfile, io
 from utils.history import save_output
 
+# ============================================================
+# CACHED WRAPPERS — evitano rebuild su ogni rerun Streamlit.
+# Key: hash del DataFrame sorgente + parametri. Reuse tra interazioni
+# innocue (radio, selectbox, multiselect) finché df non cambia.
+# ============================================================
+
+def _df_fingerprint(df: pd.DataFrame) -> str:
+    """Fingerprint stabile per cache key (shape + colonne + hash contenuto)."""
+    try:
+        h = pd.util.hash_pandas_object(df, index=True).values
+        import hashlib
+        return hashlib.md5(h.tobytes()).hexdigest() + f"_{df.shape[0]}x{df.shape[1]}"
+    except Exception:
+        return f"{df.shape[0]}x{df.shape[1]}_{hash(tuple(df.columns))}"
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_build_google(fp: str, currency: str, _df: pd.DataFrame) -> pd.DataFrame:
+    return build_google_feed(_df, currency=currency)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_build_meta(fp: str, currency: str, _df: pd.DataFrame) -> pd.DataFrame:
+    return build_meta_feed(_df, currency=currency)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def _cached_validate(fp: str, target: str, _df: pd.DataFrame) -> pd.DataFrame:
+    return validate_feed(_df, target)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def _cached_tsv(fp: str, _df: pd.DataFrame) -> bytes:
+    return _df.to_csv(index=False, sep="\t").encode("utf-8")
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def _cached_csv(fp: str, _df: pd.DataFrame) -> bytes:
+    return _df.to_csv(index=False).encode("utf-8")
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def _cached_xml(fp: str, title: str, _df: pd.DataFrame) -> bytes:
+    return to_gmc_xml(_df, title).encode("utf-8")
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_xlsx(fp: str, sheet: str, _df: pd.DataFrame) -> bytes:
+    return to_excel_bytes({sheet: _df})
+
 st.title("Catalog Optimizer · Google + Meta")
 st.caption("Genera feed ottimizzati con best practice per Google Merchant Center e Meta Catalog (Facebook/Instagram). "
            "Usa i campi ufficiali (`title`, `description`, `brand`, `color`, `size`, ecc.) generati dall'enrichment AI e normalizza availability/condition/price.")
@@ -60,10 +110,22 @@ with st.expander("🔎 Quality check catalogo (pre-export)", expanded=False):
             use_container_width=True, height=240,
         )
 
-    if qs.gtin.get('invalid'):
-        bad = df[df.get("gtin", "").astype(str).apply(
-            lambda x: bool(x.strip()) and len(x.strip().split('.')[0]) in (8, 12, 13, 14)
-        )].head(20) if "gtin" in df.columns else pd.DataFrame()
+    if qs.gtin.get('invalid') and "gtin" in df.columns:
+        gtin_str = df["gtin"].fillna("").apply(lambda v: str(v) if v is not None else "")
+        # Maschera: GTIN presente con lunghezza valida ma checksum KO (isValidGtin false)
+        from utils.validation import is_valid_gtin
+        mask = gtin_str.apply(
+            lambda x: bool(x.strip())
+                      and len(x.strip().split('.')[0]) in (8, 12, 13, 14)
+                      and not is_valid_gtin(x)
+        )
+        bad = df[mask].head(20)
+        if not bad.empty:
+            st.markdown("**GTIN con checksum invalido** (primi 20)")
+            st.dataframe(
+                bad[[c for c in ("id", "brand", "title", "gtin") if c in bad.columns]],
+                use_container_width=True, height=240,
+            )
 
     if st.button("🖼️ Verifica dimensioni immagini (primi 50)", key="_img_check",
                   help="HEAD request per ogni URL immagine. Warning se <800×800px."):
@@ -95,17 +157,81 @@ target_platform = c2.radio("Target", ["Google", "Meta", "Entrambi"], horizontal=
 st.divider()
 
 # ============================================================
-# BUILD
+# BUILD (cached)
 # ============================================================
-google_df = build_google_feed(df, currency=currency) if target_platform in ("Google", "Entrambi") else None
-meta_df = build_meta_feed(df, currency=currency) if target_platform in ("Meta", "Entrambi") else None
+_fp = _df_fingerprint(df)
+google_df = _cached_build_google(_fp, currency, df) if target_platform in ("Google", "Entrambi") else None
+meta_df = _cached_build_meta(_fp, currency, df) if target_platform in ("Meta", "Entrambi") else None
+
+# Fingerprint dei feed costruiti per cache dei serializer
+_fp_google = _df_fingerprint(google_df) if google_df is not None else ""
+_fp_meta = _df_fingerprint(meta_df) if meta_df is not None else ""
+
+# ============================================================
+# DOWNLOAD RAPIDO — in cima, prima delle validation/quality tabs
+# ============================================================
+st.markdown(
+    "<div style='background:linear-gradient(135deg, #2F6FED 0%, #1A4BB5 100%); "
+    "border-radius:14px; padding:18px 22px; color:#fff; margin:14px 0;'>"
+    "<div style='font-weight:700; font-size:1.05rem;'>📥 Scarica feed supplementari</div>"
+    "<div style='font-size:0.85rem; opacity:0.92; margin-top:4px;'>"
+    "Nomi colonna = spec ufficiale. Upload diretto su Merchant Center / Commerce Manager."
+    "</div></div>",
+    unsafe_allow_html=True,
+)
+dlc1, dlc2, dlc3, dlc4 = st.columns(4)
+# Lazy pattern: TSV/CSV veloci → OK pre-computare. XML più pesante → generato
+# al volo solo quando l'utente apre un expander dedicato.
+if google_df is not None:
+    dlc1.download_button(
+        "⬇️ TSV Google",
+        _cached_tsv(_fp_google, google_df),
+        file_name="google_feed.tsv",
+        mime="text/tab-separated-values",
+        use_container_width=True, type="primary",
+        help="Formato preferito Google Merchant Center (TSV tab-separated).",
+    )
+    with dlc2:
+        if st.toggle("XML Google RSS", key="_toggle_xml_google",
+                      help="Genera XML al volo (più lento su feed grandi)."):
+            st.download_button(
+                "⬇️ XML Google RSS",
+                _cached_xml(_fp_google, "Google Feed", google_df),
+                file_name="google_feed.xml", mime="application/xml",
+                use_container_width=True,
+            )
+if meta_df is not None:
+    dlc3.download_button(
+        "⬇️ CSV Meta",
+        _cached_csv(_fp_meta, meta_df),
+        file_name="meta_feed.csv", mime="text/csv",
+        use_container_width=True, type="primary",
+        help="Meta Commerce Manager: Cataloghi → Aggiungi prodotti → Da file.",
+    )
+    with dlc4:
+        if st.toggle("XML Meta", key="_toggle_xml_meta",
+                      help="Genera XML al volo (più lento su feed grandi)."):
+            st.download_button(
+                "⬇️ XML Meta",
+                _cached_xml(_fp_meta, "Meta Feed", meta_df),
+                file_name="meta_feed.xml", mime="application/xml",
+                use_container_width=True,
+            )
+
+st.caption(
+    f"Google: **{len(google_df) if google_df is not None else 0}** prodotti · "
+    f"Meta: **{len(meta_df) if meta_df is not None else 0}** prodotti · "
+    f"Per Excel, escludi colonne, validation report, delta diff e bundle ZIP: vedi sezioni sotto."
+)
+
+st.divider()
 
 # ============================================================
 # GOOGLE PANEL
 # ============================================================
 if google_df is not None:
     st.subheader("🛒 Google Merchant Center")
-    val = validate_feed(google_df, "google")
+    val = _cached_validate(_fp_google, "google", google_df)
 
     errors = (val["stato"] == "ERROR").sum()
     warns = (val["stato"] == "WARN").sum()
@@ -165,25 +291,32 @@ if google_df is not None:
             key="_scarica_excl_google",
             help="Colonne selezionate non saranno incluse in TSV/CSV/XML/Excel generati qui.",
         )
-        _gd = google_df.drop(columns=ex_g, errors="ignore")
+        _gd = google_df.drop(columns=ex_g, errors="ignore") if ex_g else google_df
+        _fp_gd = _df_fingerprint(_gd) if ex_g else _fp_google
 
+        # Lazy: TSV/CSV veloci precomputed (cache). XML/Excel generati on-demand.
         e1, e2, e3, e4 = st.columns(4)
         e1.download_button(f"CSV (TSV per GMC) · {len(_gd.columns)} col.",
-                            _gd.to_csv(index=False, sep="\t").encode("utf-8"),
+                            _cached_tsv(_fp_gd, _gd),
                             "google_feed.tsv", "text/tab-separated-values",
                             use_container_width=True,
                             help="GMC accetta TSV (tab-separated) come formato preferito")
-        e2.download_button("Excel",
-                            to_excel_bytes({"google_feed": _gd}),
-                            "google_feed.xlsx",
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True)
-        e3.download_button("XML (RSS 2.0 GMC)",
-                            to_gmc_xml(_gd, "Google Feed").encode("utf-8"),
-                            "google_feed.xml", "application/xml",
-                            use_container_width=True)
+        with e2:
+            if st.toggle("Excel", key="_toggle_xlsx_google",
+                          help="Build xlsx al volo (lento su feed grandi)."):
+                st.download_button("⬇️ Excel",
+                                    _cached_xlsx(_fp_gd, "google_feed", _gd),
+                                    "google_feed.xlsx",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True)
+        with e3:
+            if st.toggle("XML (RSS 2.0 GMC)", key="_toggle_xml_google_exp"):
+                st.download_button("⬇️ XML",
+                                    _cached_xml(_fp_gd, "Google Feed", _gd),
+                                    "google_feed.xml", "application/xml",
+                                    use_container_width=True)
         e4.download_button("CSV standard",
-                            _gd.to_csv(index=False).encode("utf-8"),
+                            _cached_csv(_fp_gd, _gd),
                             "google_feed.csv", "text/csv",
                             use_container_width=True)
 
@@ -197,7 +330,7 @@ if google_df is not None:
 # ============================================================
 if meta_df is not None:
     st.subheader("📘 Meta Catalog (Facebook + Instagram)")
-    val = validate_feed(meta_df, "meta")
+    val = _cached_validate(_fp_meta, "meta", meta_df)
 
     errors = (val["stato"] == "ERROR").sum()
     warns = (val["stato"] == "WARN").sum()
@@ -239,22 +372,27 @@ if meta_df is not None:
             key="_scarica_excl_meta",
             help="Colonne selezionate non saranno incluse in CSV/XML/Excel.",
         )
-        _md = meta_df.drop(columns=ex_m, errors="ignore")
+        _md = meta_df.drop(columns=ex_m, errors="ignore") if ex_m else meta_df
+        _fp_md = _df_fingerprint(_md) if ex_m else _fp_meta
 
         e1, e2, e3 = st.columns(3)
         e1.download_button(f"CSV (Meta format) · {len(_md.columns)} col.",
-                            _md.to_csv(index=False).encode("utf-8"),
+                            _cached_csv(_fp_md, _md),
                             "meta_feed.csv", "text/csv",
                             use_container_width=True)
-        e2.download_button("Excel",
-                            to_excel_bytes({"meta_feed": _md}),
-                            "meta_feed.xlsx",
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True)
-        e3.download_button("XML",
-                            to_gmc_xml(_md, "Meta Feed").encode("utf-8"),
-                            "meta_feed.xml", "application/xml",
-                            use_container_width=True)
+        with e2:
+            if st.toggle("Excel", key="_toggle_xlsx_meta"):
+                st.download_button("⬇️ Excel",
+                                    _cached_xlsx(_fp_md, "meta_feed", _md),
+                                    "meta_feed.xlsx",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True)
+        with e3:
+            if st.toggle("XML", key="_toggle_xml_meta_exp"):
+                st.download_button("⬇️ XML",
+                                    _cached_xml(_fp_md, "Meta Feed", _md),
+                                    "meta_feed.xml", "application/xml",
+                                    use_container_width=True)
 
         st.info("**Come usarlo**: Commerce Manager → Cataloghi → Aggiungi prodotti → "
                 "Da file di dati. Meta supporta CSV, TSV, XML, Google Sheets.")
@@ -340,16 +478,18 @@ if st.button("Genera ZIP completo", type="primary", use_container_width=True):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         if google_df is not None:
-            zf.writestr("google/google_feed.tsv", google_df.to_csv(index=False, sep="\t"))
-            zf.writestr("google/google_feed.csv", google_df.to_csv(index=False))
-            zf.writestr("google/google_feed.xml", to_gmc_xml(google_df, "Google Feed"))
-            zf.writestr("google/google_feed.xlsx", to_excel_bytes({"google_feed": google_df}))
-            zf.writestr("google/validation_report.csv", validate_feed(google_df, "google").to_csv(index=False))
+            zf.writestr("google/google_feed.tsv", _cached_tsv(_fp_google, google_df))
+            zf.writestr("google/google_feed.csv", _cached_csv(_fp_google, google_df))
+            zf.writestr("google/google_feed.xml", _cached_xml(_fp_google, "Google Feed", google_df))
+            zf.writestr("google/google_feed.xlsx", _cached_xlsx(_fp_google, "google_feed", google_df))
+            zf.writestr("google/validation_report.csv",
+                         _cached_validate(_fp_google, "google", google_df).to_csv(index=False))
         if meta_df is not None:
-            zf.writestr("meta/meta_feed.csv", meta_df.to_csv(index=False))
-            zf.writestr("meta/meta_feed.xml", to_gmc_xml(meta_df, "Meta Feed"))
-            zf.writestr("meta/meta_feed.xlsx", to_excel_bytes({"meta_feed": meta_df}))
-            zf.writestr("meta/validation_report.csv", validate_feed(meta_df, "meta").to_csv(index=False))
+            zf.writestr("meta/meta_feed.csv", _cached_csv(_fp_meta, meta_df))
+            zf.writestr("meta/meta_feed.xml", _cached_xml(_fp_meta, "Meta Feed", meta_df))
+            zf.writestr("meta/meta_feed.xlsx", _cached_xlsx(_fp_meta, "meta_feed", meta_df))
+            zf.writestr("meta/validation_report.csv",
+                         _cached_validate(_fp_meta, "meta", meta_df).to_csv(index=False))
         # README dentro lo zip
         readme = """# Feed ottimizzati — Generato da Feed Enricher Pro
 

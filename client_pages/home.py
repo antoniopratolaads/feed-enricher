@@ -143,7 +143,7 @@ with col_a:
         """
         <div class='home-action-card'>
             <div class='home-action-icon'>✦</div>
-            <div class='home-action-title'>Avvia Wizard Enrichment</div>
+            <div class='home-action-title'>Carica feed & arricchisci</div>
             <div class='home-action-desc'>
                 Flusso guidato in 4 step: progetto → upload feed → AI enrichment → scarica catalogo.
                 Salvataggio automatico, puoi riprendere in ogni momento.
@@ -157,7 +157,7 @@ with col_a:
         unsafe_allow_html=True,
     )
     if st.button("Inizia ora →", type="primary", use_container_width=True, key="_cta_wizard"):
-        st.switch_page("client_pages/wizard.py")
+        st.switch_page("client_pages/upload_feed.py")
 
 with col_b:
     st.markdown(
@@ -298,6 +298,6 @@ if df is not None:
     col_a, col_b = st.columns(2)
     if col_a.button("Continua nel wizard →", type="primary", use_container_width=True,
                     key="_cta_continue"):
-        st.switch_page("client_pages/wizard.py")
+        st.switch_page("client_pages/upload_feed.py")
     if col_b.button("Gestisci progetti", use_container_width=True, key="_cta_projects"):
-        st.switch_page("client_pages/progetti.py")
+        st.switch_page("client_pages/clienti.py")
