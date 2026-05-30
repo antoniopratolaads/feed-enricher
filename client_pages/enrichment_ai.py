@@ -6,7 +6,7 @@ from utils import state
 from utils.state import init_state
 from utils.ui import (
     apply_theme, api_key_banner, empty_state, guarded, stepper,
-    cost_estimate_card, cost_projection_table, LoadingProgress,
+    cost_estimate_card, cost_projection_table, LoadingProgress, status_badge,
 )
 from utils.enrichment import enrich_dataframe, list_sectors, load_sector
 from utils import cache as enrich_cache
@@ -224,181 +224,341 @@ mc[2].metric("Da arricchire", f"{n_todo:,}", help="Non arricchiti o con errore")
 
 st.markdown("### Seleziona prodotti da arricchire")
 st.caption(
-    "Usa i filtri per restringere, poi spunta i prodotti. "
-    "La configurazione AI è sotto la tabella."
+    "Scegli un preset, restringi con i filtri, poi spunta i prodotti. "
+    "La selezione persiste tra le pagine. La configurazione AI è sotto."
 )
 
 # ============================================================
-# FILTRI
+# PRODUCT CARD GRID (Fase 2c)
+# Selezione per product_key (mai per indice) → persiste tra
+# pagine/filtri/vista. selected_indices ricostruito alla fine per il
+# launch a valle (df.loc[selected_indices]).
 # ============================================================
-fc1, fc2, fc3, fc4 = st.columns([2, 2, 2, 2])
-search = fc1.text_input("🔎 Cerca title/brand/id", placeholder="es. Nike, T-shirt, ABC123",
-                         key="_enrich_search")
+import html as _html
+
+# --- product_key UNA volta per rerun (rischio #1: niente iterrows ripetuti) ---
+# La strategy è quella del feed attivo; in path demo (no feed) si usa "id".
+_act_client_pk, _act_feed_pk = state.get_active()
+if _act_client_pk and _act_feed_pk:
+    _pk_strategy = (_cs.get_feed(_act_client_pk, _act_feed_pk) or {}).get(
+        "id_strategy", "hierarchical")
+else:
+    _pk_strategy = "id"  # demo / feed non bindato: id stabile come key
+
+
+def _STATUS_TEXT(status) -> str:
+    """Compromesso testuale per la cella Stato in tabella (no HTML).
+
+    Pallino unicode + label, palette §3 coerente con status_badge.
+    """
+    s = str(status or "").strip().lower()
+    if s == "ok":
+        return "● Arricchito"
+    if s.startswith("error"):
+        return "✕ Errore"
+    if s in ("cached", "stale"):
+        return "! Da rivedere"
+    return "○ Grezzo"
+
+
+def _row_product_key(row: dict) -> str:
+    """product_key coerente con feed_diff (stesso match di pending/merge).
+
+    Se la key risultasse vuota (es. strategy 'id' senza id) cade su un hash
+    stabile del contenuto così la card resta sempre selezionabile.
+    """
+    from utils import feed_diff as _fd
+    k = _fd.product_key(row, strategy=_pk_strategy)
+    if not k or k == "h:":
+        k = _fd.product_key(row, strategy="hash")
+    return k
+
+
+# Precalcola la Series _pkey UNA volta (riusata per pending + ricostruzione).
+_pkey = df.apply(lambda r: _row_product_key(r.to_dict()), axis=1)
+_pkey.name = "_pkey"
+
+# Set fonte di verità della selezione.
+if "selected_keys" not in st.session_state:
+    st.session_state["selected_keys"] = set()
+selected_keys: set = st.session_state["selected_keys"]
+
+# Coda pending del feed attivo (stesse key di feed_diff) → preset "Da arricchire".
+_pending_keys: set = set()
+if _act_client_pk and _act_feed_pk:
+    try:
+        # get_pending ritorna entry con campo "key" = product_key (feed_diff).
+        _pending_keys = {p.get("key") for p in
+                          _cs.get_pending(_act_client_pk, _act_feed_pk)
+                          if p.get("key")}
+    except Exception:
+        _pending_keys = set()
+
+
+# ── Callback selezione: legge dalla key del widget, muta solo il set ──────────
+def _toggle_card(pkey: str, widget_key: str) -> None:
+    if st.session_state.get(widget_key):
+        selected_keys.add(pkey)
+    else:
+        selected_keys.discard(pkey)
+
+
+def _reset_page() -> None:
+    """Torna a pagina 1 quando cambiano preset/filtri/vista/page-size."""
+    st.session_state["_card_page"] = 1
+
+
+# ============================================================
+# BARRA AZIONI — 3 fasce: preset · filtri · contatore+azioni+vista
+# ============================================================
+# Fascia 1: preset segmentato (segmented_control con fallback radio)
+_preset_opts = ["⭐ Da arricchire", "⚠ Errori", "Tutti"]
+if hasattr(st, "segmented_control"):
+    preset = st.segmented_control(
+        "Preset", options=_preset_opts, default="⭐ Da arricchire",
+        key="_enrich_preset", on_change=_reset_page, label_visibility="collapsed",
+    ) or "⭐ Da arricchire"
+else:  # fallback Streamlit < segmented_control
+    preset = st.radio(
+        "Preset", options=_preset_opts, index=0, horizontal=True,
+        key="_enrich_preset", on_change=_reset_page, label_visibility="collapsed",
+    )
+
+# Fascia 2: filtri (restringono la vista, NON preselezionano)
+fc1, fc2, fc3 = st.columns([3, 2, 2])
+search = fc1.text_input("Cerca", placeholder="Cerca per titolo o ID…",
+                         key="_enrich_search", on_change=_reset_page,
+                         label_visibility="collapsed")
 brand_options = sorted(df["brand"].dropna().astype(str).unique().tolist()) \
                  if "brand" in df.columns else []
 brand_filter = fc2.multiselect("Brand", options=brand_options, default=[],
-                                 key="_enrich_brand_filter")
+                                 key="_enrich_brand_filter", on_change=_reset_page,
+                                 placeholder="Brand")
 cat_col = "google_product_category" if "google_product_category" in df.columns \
           else ("product_type" if "product_type" in df.columns else None)
 cat_options = sorted(df[cat_col].dropna().astype(str).unique().tolist()) if cat_col else []
-cat_filter = fc3.multiselect("Categoria" if cat_col else "Categoria (non disp.)",
-                              options=cat_options, default=[], key="_enrich_cat_filter",
-                              disabled=not cat_col)
-status_choice = fc4.selectbox("Status enrichment",
-                               options=["Tutti", "Solo non arricchiti", "Solo arricchiti", "Solo errori"],
-                               index=0, key="_enrich_status_filter")
+cat_filter = fc3.multiselect("Categoria", options=cat_options, default=[],
+                              key="_enrich_cat_filter", on_change=_reset_page,
+                              placeholder="Categoria", disabled=not cat_col)
 
+# --- maschera filtri + preset (in pandas, una volta) -------------------------
 mask = pd.Series([True] * len(df), index=df.index)
 if search:
     s = search.lower()
-    search_cols = [c for c in ("title", "brand", "id", "product_type") if c in df.columns]
+    search_cols = [c for c in ("title", "id") if c in df.columns]
     text_mask = pd.Series([False] * len(df), index=df.index)
     for c in search_cols:
-        text_mask |= df[c].astype(str).str.lower().str.contains(s, na=False)
+        text_mask |= df[c].astype(str).str.lower().str.contains(s, na=False, regex=False)
     mask &= text_mask
 if brand_filter and "brand" in df.columns:
     mask &= df["brand"].astype(str).isin(brand_filter)
 if cat_filter and cat_col:
     mask &= df[cat_col].astype(str).isin(cat_filter)
-if status_choice == "Solo non arricchiti":
-    mask &= ~_status_lower.isin(["ok", "cached"])
-elif status_choice == "Solo arricchiti":
-    mask &= _status_lower.isin(["ok", "cached"])
-elif status_choice == "Solo errori":
+
+# Preset: "Da arricchire" = non ok/cached UNITO ai pending del feed.
+if preset == "⭐ Da arricchire":
+    todo_mask = ~_status_lower.isin(["ok", "cached"])
+    if _pending_keys:
+        todo_mask |= _pkey.isin(_pending_keys)
+    mask &= todo_mask
+elif preset == "⚠ Errori":
     mask &= _status_lower.str.startswith("error")
+# "Tutti" → nessun vincolo di stato
 
 filtered = df[mask].copy()
+filtered_keys = _pkey[mask]  # Series allineata a filtered (stesso index)
 
 # ============================================================
-# TABELLA SELEZIONE (checkbox + badge status)
+# VIEW SETUP — pagina, page-size, vista (card/tabella)
 # ============================================================
-selected_indices: list = []
-if filtered.empty:
-    st.info("Nessun prodotto corrisponde ai filtri.")
-else:
-    def _badge(s):
-        s = str(s).strip().lower()
-        return {"ok": "🟢 OK", "cached": "🔵 Cache", "reverted": "↶ Undo"}.get(s,
-               "🔴 Errore" if s.startswith("error") else
-               "🟡 Vuoto" if s.startswith("empty") else "⚪ —")
+if "_card_page" not in st.session_state:
+    st.session_state["_card_page"] = 1
 
-    # Vista toggle: compatta (essenziale) vs estesa (TUTTI i campi GMC popolati)
-    view_mode = st.radio(
-        "Vista tabella",
-        options=["Compatta", "Estesa (tutti gli attributi GMC)",
-                  "Solo Google", "Solo Meta"],
-        index=0, horizontal=True, key="_view_mode",
-        label_visibility="collapsed",
-        help="Compatta = 5 colonne base · Estesa = tutti i campi GMC popolati · "
-             "Solo Google / Solo Meta = colonne specifiche per piattaforma",
-    )
-
-    from utils.catalog_optimizer import GOOGLE_FIELDS as _GFL, META_FIELDS as _MFL
-
-    if view_mode == "Compatta":
-        display_cols = [c for c in ("id", "title", "brand", "price", "_enrichment_status")
-                         if c in filtered.columns]
-    elif view_mode == "Estesa (tutti gli attributi GMC)":
-        order = [t for t, _, _, _ in _GFL] + \
-                [t for t, _, _ in _MFL if t not in {x for x, _, _, _ in _GFL}]
-        # Tieni _enrichment_status alla fine per badge
-        display_cols = ["id"] + [c for c in order if c != "id" and c in filtered.columns]
-        # Filtra colonne totalmente vuote per non rumorose
-        display_cols = [c for c in display_cols
-                         if c in ("id", "_enrichment_status") or
-                         filtered[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
-        display_cols.append("_enrichment_status") if "_enrichment_status" in filtered.columns and "_enrichment_status" not in display_cols else None
-    elif view_mode == "Solo Google":
-        order = [t for t, _, _, _ in _GFL]
-        display_cols = [c for c in order if c in filtered.columns]
-        display_cols = [c for c in display_cols
-                         if c == "id" or
-                         filtered[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
-        if "_enrichment_status" in filtered.columns:
-            display_cols.append("_enrichment_status")
-    else:  # Solo Meta
-        order = [t for t, _, _ in _MFL]
-        display_cols = [c for c in order if c in filtered.columns]
-        display_cols = [c for c in display_cols
-                         if c == "id" or
-                         filtered[c].astype(str).str.strip().replace({"nan": "", "None": ""}).ne("").any()]
-        if "_enrichment_status" in filtered.columns:
-            display_cols.append("_enrichment_status")
-
-    display_df = filtered[display_cols].copy()
-    # Stato pinned vicino a checkbox (prima colonna dopo Seleziona)
-    if "_enrichment_status" in display_df.columns:
-        stato_series = display_df["_enrichment_status"].apply(_badge)
-        display_df.drop(columns=["_enrichment_status"], inplace=True)
+# Fascia 3: contatore + azioni bulk + vista + page size
+n_visible = len(filtered)
+n_selected_live = len(selected_keys)
+tc1, tc2 = st.columns([3, 2])
+tc1.markdown(
+    f"<div style='padding-top:6px; font-size:0.9rem; color:#4B5563;'>"
+    f"<b>{n_visible:,}</b> prodotti · "
+    f"<span style='color:#2F6FED; font-weight:600;'>{n_selected_live:,} selezionati</span>"
+    f"</div>",
+    unsafe_allow_html=True,
+)
+with tc2:
+    vcol, pcol = st.columns([2, 1])
+    _view_opts = ["▦ Card", "☰ Tabella"]
+    if hasattr(st, "segmented_control"):
+        view = vcol.segmented_control(
+            "Vista", options=_view_opts, default="▦ Card",
+            key="_enrich_view", on_change=_reset_page, label_visibility="collapsed",
+        ) or "▦ Card"
     else:
-        stato_series = pd.Series(["⚪ —"] * len(display_df), index=display_df.index)
-    display_df.insert(0, "Stato", stato_series)
-    display_df.insert(0, "✔ Seleziona", False)
+        view = vcol.radio("Vista", options=_view_opts, index=0, horizontal=True,
+                           key="_enrich_view", on_change=_reset_page,
+                           label_visibility="collapsed")
+    page_size = pcol.selectbox("Per pagina", options=[24, 48], index=0,
+                                key="_enrich_page_size", on_change=_reset_page,
+                                label_visibility="collapsed")
 
-    # Quick action buttons
-    sc1, sc2, sc3, sc4, sc5 = st.columns([1.4, 1.4, 1.4, 1.6, 2.2])
-    if sc1.button(f"✔ Tutti visibili ({len(filtered):,})",
-                    use_container_width=True, key="_sel_all_visible"):
-        st.session_state["_force_sel"] = filtered.index.tolist()
-    if sc2.button("🟢 Non arricchiti visibili", use_container_width=True, key="_sel_unenr"):
-        un_idx = filtered[~filtered["_enrichment_status"].astype(str).str.strip().str.lower()
-                          .isin(["ok", "cached"])].index.tolist()
-        st.session_state["_force_sel"] = un_idx
-    if sc3.button("☐ Deseleziona tutti", use_container_width=True, key="_sel_none"):
-        st.session_state["_force_sel"] = []
+# Azioni bulk: operano sullo SLICE corrente (pagina) o azzerano tutto.
+ac1, ac2, _ac3 = st.columns([1.4, 1.4, 3.2])
 
-    # Seleziona primi N visibili (per batch rapido)
-    with sc4:
-        n_quick = st.number_input("Primi N", min_value=1, max_value=max(len(filtered), 1),
-                                    value=min(50, len(filtered)), step=10, key="_sel_n",
-                                    label_visibility="collapsed")
-    if sc5.button(f"⚡ Seleziona primi {int(n_quick):,} visibili",
-                    use_container_width=True, key="_sel_first_n"):
-        st.session_state["_force_sel"] = filtered.index[:int(n_quick)].tolist()
+# --- paginazione: clamp pagina + slice ---------------------------------------
+total_pages = max((n_visible + page_size - 1) // page_size, 1)
+page = min(max(int(st.session_state.get("_card_page", 1)), 1), total_pages)
+st.session_state["_card_page"] = page
+start = (page - 1) * page_size
+page_slice = filtered.iloc[start:start + page_size]
+page_keys = filtered_keys.iloc[start:start + page_size].tolist()
 
-    forced = st.session_state.get("_force_sel")
-    if forced is not None:
-        display_df["✔ Seleziona"] = display_df.index.isin(forced)
-        st.session_state["_force_sel"] = None
+if ac1.button("Seleziona pagina", use_container_width=True, key="_sel_page",
+               disabled=page_slice.empty):
+    selected_keys.update(page_keys)
+    st.rerun()
+if ac2.button("Deseleziona tutto", use_container_width=True, key="_sel_none",
+               disabled=not selected_keys):
+    selected_keys.clear()
+    st.rerun()
 
-    _col_cfg_table = {
-        "✔ Seleziona": st.column_config.CheckboxColumn(width="small", pinned=True),
-        "id":          st.column_config.TextColumn(width="medium"),
-        "title":       st.column_config.TextColumn(width="large"),
-        "description": st.column_config.TextColumn(width="large"),
-        "brand":       st.column_config.TextColumn(width="small"),
-        "price":       st.column_config.TextColumn(width="small"),
-        "product_highlight":       st.column_config.TextColumn(width="large"),
-        "product_detail":          st.column_config.TextColumn(width="large"),
-        "google_product_category": st.column_config.TextColumn(width="medium"),
-        "product_type":            st.column_config.TextColumn(width="medium"),
-        "title_meta":              st.column_config.TextColumn(width="large"),
-        "short_description":       st.column_config.TextColumn(width="medium"),
-        "rich_text_description":   st.column_config.TextColumn(width="large"),
-        "Stato": st.column_config.TextColumn(width="small", pinned=True,
-                    help="🟢 OK · 🔵 Cache · 🔴 Errore · 🟡 Vuoto · ⚪ non arricchito"),
+# ============================================================
+# EMPTY STATES
+# ============================================================
+if filtered.empty:
+    if preset == "⚠ Errori":
+        empty_state(
+            icon="✅", title="Nessun errore",
+            description="Tutti i prodotti elaborati sono andati a buon fine.",
+        )
+    else:
+        empty_state(
+            icon="🔍", title="Nessun prodotto trovato",
+            description="Nessun prodotto corrisponde ai filtri. "
+                        "Prova a rimuovere un filtro o cambia preset.",
+        )
+elif view == "☰ Tabella":
+    # ============================================================
+    # VISTA TABELLA — data_editor sullo STESSO selected_keys.
+    # La selezione in tabella riconcilia il set SENZA perdere altre pagine.
+    # ============================================================
+    base_cols = [c for c in ("image_link", "id", "title", "brand", "price")
+                  if c in page_slice.columns]
+    tbl = page_slice[base_cols].copy()
+    tbl.insert(0, "_pkey", page_keys)
+    tbl.insert(0, "Seleziona", [k in selected_keys for k in page_keys])
+    tbl["Stato"] = page_slice.get(
+        "_enrichment_status", pd.Series([""] * len(page_slice), index=page_slice.index)
+    ).apply(lambda s: _STATUS_TEXT(s))
+
+    _img_col = (st.column_config.ImageColumn("Img", width="small")
+                if hasattr(st.column_config, "ImageColumn")
+                else st.column_config.TextColumn("Img", width="small"))
+    _tbl_cfg = {
+        "Seleziona": st.column_config.CheckboxColumn("☑", width="small", pinned=True),
+        "_pkey": None,  # nascondi key tecnica
+        "image_link": _img_col,
+        "id": st.column_config.TextColumn("ID", width="small"),
+        "title": st.column_config.TextColumn("Title", width="large"),
+        "brand": st.column_config.TextColumn("Brand", width="small"),
+        "price": st.column_config.TextColumn("Prezzo", width="small"),
+        "Stato": st.column_config.TextColumn("Stato", width="small", pinned=True),
     }
-    _height = 480 if view_mode != "Compatta" else 380
     edited = st.data_editor(
-        display_df,
-        use_container_width=True, height=_height, hide_index=True,
-        column_config=_col_cfg_table,
-        disabled=[c for c in display_df.columns if c != "✔ Seleziona"],
-        key=f"_edit_selection_{view_mode}",
+        tbl, use_container_width=True, height=520, hide_index=True,
+        column_config=_tbl_cfg,
+        disabled=[c for c in tbl.columns if c != "Seleziona"],
+        key=f"_edit_table_{page}_{page_size}",
     )
-    selected_indices = edited.index[edited["✔ Seleziona"]].tolist()
+    # Riconcilia SOLO le key di questa pagina (non sovrascrivere altre pagine).
+    for _k, _sel in zip(edited["_pkey"].tolist(), edited["Seleziona"].tolist()):
+        if _sel:
+            selected_keys.add(_k)
+        else:
+            selected_keys.discard(_k)
+else:
+    # ============================================================
+    # VISTA CARD — st.columns(4) fisso; card HTML + checkbox nativo.
+    # Renderizza SOLO lo slice (max 48) → rischio #1 risolto.
+    # ============================================================
+    rows = page_slice.reset_index(drop=True)
+    for block_start in range(0, len(rows), 4):
+        cols = st.columns(4)
+        for col_i in range(4):
+            r_i = block_start + col_i
+            if r_i >= len(rows):
+                continue
+            row = rows.iloc[r_i]
+            pkey = page_keys[r_i]
+            is_sel = pkey in selected_keys
 
-    if view_mode != "Compatta":
-        st.caption(f"_Mostrate **{len(display_cols) - 1}** colonne attributi "
-                    f"(solo popolate). Scrolla orizzontalmente per vederle tutte._")
+            # Immagine: image_link → additional_image_link, solo https.
+            img_url = ""
+            for _imc in ("image_link", "additional_image_link"):
+                v = str(row.get(_imc, "") or "").strip()
+                if v.lower().startswith("https://"):
+                    img_url = v
+                    break
+            if img_url:
+                img_html = (f"<div class='pc-imgwrap'>"
+                            f"<img loading='lazy' src='{_html.escape(img_url, quote=True)}' "
+                            f"alt=''></div>")
+            else:
+                img_html = (
+                    "<div class='pc-imgwrap'><div class='pc-noimg'>"
+                    "<div class='pc-noimg-icon'>▦</div>"
+                    "<div class='pc-noimg-txt'>Nessuna immagine</div></div></div>"
+                )
 
-    st.markdown(
-        f"<div style='background:#EEF4FF; border:1px solid #DCE7FE; border-radius:10px; "
-        f"padding:10px 14px; font-weight:600; color:#2F6FED; text-align:center; margin:8px 0;'>"
-        f"✨ {len(selected_indices):,} selezionati · {len(filtered):,} visibili · {n_total:,} totali"
-        f"</div>",
+            # Title / brand / price (escapati, prezzo mono con fallback —).
+            title_txt = _html.escape(str(row.get("title", "") or "").strip()) or "—"
+            brand_txt = str(row.get("brand", "") or "").strip()
+            brand_html = (f"<div class='pc-brand'>{_html.escape(brand_txt)}</div>"
+                          if brand_txt else "")
+            price_txt = str(row.get("price", "") or "").strip()
+            if price_txt and price_txt.lower() not in ("nan", "none"):
+                price_html = f"<div class='pc-price'>{_html.escape(price_txt)}</div>"
+            else:
+                price_html = "<div class='pc-price pc-price-empty'>—</div>"
+
+            check_html = "<div class='pc-check'>✓</div>" if is_sel else ""
+            sel_cls = " is-selected" if is_sel else ""
+            card_html = (
+                f"<div class='preview-card product-card{sel_cls}'>"
+                f"{check_html}{img_html}"
+                f"<div class='pc-body'>"
+                f"{status_badge(row.get('_enrichment_status', ''))}"
+                f"<div class='pc-title'>{title_txt}</div>"
+                f"{brand_html}{price_html}"
+                f"</div></div>"
+            )
+            with cols[col_i]:
+                st.markdown(card_html, unsafe_allow_html=True)
+                wkey = f"sel_{pkey}_{page}"
+                st.checkbox("Seleziona", value=is_sel, key=wkey,
+                             on_change=_toggle_card, args=(pkey, wkey))
+
+    # ── Paginazione (in fondo) ──────────────────────────────────────────────
+    nav_prev, nav_mid, nav_next = st.columns([1, 2, 1])
+    if nav_prev.button("‹ Precedente", use_container_width=True,
+                        key="_pg_prev", disabled=(page <= 1)):
+        st.session_state["_card_page"] = page - 1
+        st.rerun()
+    nav_mid.markdown(
+        f"<div style='text-align:center; padding-top:8px; color:#4B5563; "
+        f"font-size:0.88rem;'>Pagina <b>{page}</b> / {total_pages}</div>",
         unsafe_allow_html=True,
     )
+    if nav_next.button("Successiva ›", use_container_width=True,
+                        key="_pg_next", disabled=(page >= total_pages)):
+        st.session_state["_card_page"] = page + 1
+        st.rerun()
+
+# ============================================================
+# RICOSTRUZIONE selected_indices (contratto launch a valle)
+# Indici del df il cui product_key ∈ selected_keys. Riusa la Series
+# _pkey precalcolata (no iterrows). Valido dopo cambio pagina/filtro.
+# ============================================================
+selected_indices = _pkey[_pkey.isin(selected_keys)].index.tolist()
 
 # ============================================================
 # CONFIGURAZIONE — sempre visibile (modello, settore, target)

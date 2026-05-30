@@ -454,6 +454,58 @@ button[kind="primary"]:focus-visible {
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
 }
+/* Product card (grid selezione enrichment 2c) — riusa .preview-card */
+.product-card {
+    display: flex; flex-direction: column;
+    padding: 0; margin-bottom: 6px; overflow: hidden;
+    position: relative;
+}
+.product-card.is-selected {
+    border-color: var(--blue-500) !important;
+    background: var(--blue-50) !important;
+    box-shadow: 0 0 0 2px var(--blue-500), var(--shadow-md) !important;
+}
+.product-card .pc-imgwrap {
+    position: relative; width: 100%; aspect-ratio: 1 / 1;
+    background: var(--bg-subtle); overflow: hidden;
+}
+.product-card .pc-imgwrap img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    background: var(--bg-subtle);
+}
+.product-card .pc-noimg {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100%; height: 100%; color: var(--text-muted); gap: 4px;
+}
+.product-card .pc-noimg .pc-noimg-icon { font-size: 2rem; line-height: 1; }
+.product-card .pc-noimg .pc-noimg-txt { font-size: 0.72rem; }
+.product-card .pc-check {
+    position: absolute; top: 8px; right: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--blue-500); color: #FFFFFF;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+    box-shadow: 0 2px 6px rgba(47,111,237,0.35); z-index: 2;
+}
+.product-card .pc-body { padding: 10px 12px 12px; }
+.product-card .pc-title {
+    font-size: 0.82rem; font-weight: 600; color: var(--text-primary);
+    line-height: 1.35; margin: 6px 0 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.product-card .pc-brand { font-size: 0.74rem; color: var(--text-secondary); }
+.product-card .pc-price {
+    font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
+    font-family: 'Geist Mono', 'JetBrains Mono', monospace; margin-top: 2px;
+}
+.product-card .pc-price.pc-price-empty { color: var(--text-muted); }
+/* Sotto 768px riduce il font interno (le colonne Streamlit non si ricolonnano,
+   limite no-JS documentato in spec) */
+@media (max-width: 768px) {
+    .product-card .pc-title { font-size: 0.78rem; }
+}
+
 .step-done { border-left: 3px solid var(--success); }
 .step-pending { border-left: 3px solid var(--blue-500); }
 .step-todo { border-left: 3px solid var(--border-strong); opacity: 0.7; }
@@ -1123,6 +1175,53 @@ def cost_projection_table(n_rows: int):
         "**Caching** = prompt caching Anthropic/OpenAI (system prompt scritto 1 volta, letto a 10% del prezzo). "
         "**Batch API** = invio async, risultati entro 24h, sconto 50% su tutto. "
         "Ideale per re-enrichment notturno cron di cataloghi interi."
+    )
+
+
+# ============================================================
+# STATUS BADGE — palette stati enrichment (fonte unica, §3 spec)
+# ============================================================
+# Mapping `_enrichment_status` reale (ok/cached/error*/empty/stale/"")
+# → (etichetta UI, colore pieno, sfondo soft, icona). Coerente con la
+# tabella §3 della DESIGN_SPEC_FASE2: stesso linguaggio cromatico in
+# card, tabella, sidebar, metriche.
+_STATUS_STYLES = {
+    "grezzo":     ("Grezzo",      "#9CA3AF", "#F4F5F7", "○"),  # var(--text-muted)/var(--bg-subtle)
+    "arricchito": ("Arricchito",  "#10B981", "#ECFDF5", "●"),  # var(--success)/var(--success-bg)
+    "errore":     ("Errore",      "#EF4444", "#FEF2F2", "✕"),  # var(--danger)/var(--danger-bg)
+    "rivedere":   ("Da rivedere", "#F59E0B", "#FFFBEB", "!"),  # var(--warning)/var(--warning-bg)
+}
+
+
+def _status_kind(status: str) -> str:
+    """Riduce il valore reale di `_enrichment_status` a una chiave di palette.
+
+    empty/"" → grezzo · ok → arricchito · error* → errore · cached/stale → rivedere.
+    """
+    s = str(status or "").strip().lower()
+    if s == "ok":
+        return "arricchito"
+    if s.startswith("error"):
+        return "errore"
+    if s in ("cached", "stale"):
+        return "rivedere"
+    # empty, "", nan, qualsiasi altro → mai arricchito
+    return "grezzo"
+
+
+def status_badge(status: str) -> str:
+    """Return an HTML <span> soft badge per lo stato enrichment dato.
+
+    Sfondo soft (`*-bg`), testo nel colore pieno (leggibile sul soft),
+    icona unicode + label. Usato nelle product card e ovunque serva il
+    badge stato coerente. Restituisce SEMPRE markup valido (default Grezzo).
+    """
+    label, color, bg, icon = _STATUS_STYLES[_status_kind(status)]
+    return (
+        f"<span style='display:inline-flex; align-items:center; gap:4px; "
+        f"background:{bg}; color:{color}; font-size:0.7rem; font-weight:600; "
+        f"padding:2px 8px; border-radius:8px; line-height:1.4; white-space:nowrap;'>"
+        f"<span style='font-size:0.8em;'>{icon}</span>{label}</span>"
     )
 
 
