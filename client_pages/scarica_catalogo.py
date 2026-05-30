@@ -3,8 +3,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+from utils import state
 from utils.state import init_state, current_df
-from utils.ui import apply_theme, empty_state
+from utils.ui import apply_theme, empty_state, stepper
 from utils.catalog_optimizer import (
     build_google_feed, build_meta_feed, validate_feed, title_quality_check,
     GOOGLE_FIELDS,
@@ -72,7 +73,20 @@ st.title("Catalog Optimizer · Google + Meta")
 st.caption("Genera feed ottimizzati con best practice per Google Merchant Center e Meta Catalog (Facebook/Instagram). "
            "Usa i campi ufficiali (`title`, `description`, `brand`, `color`, `size`, ecc.) generati dall'enrichment AI e normalizza availability/condition/price.")
 
+# Guard contesto: serve un cliente/feed attivo + un df in sessione.
+_act_client, _act_feed = state.get_active()
 df = current_df()
+if (not _act_client or not _act_feed) and df is None:
+    empty_state(
+        icon="🧭",
+        title="Nessun contesto attivo",
+        description="Scegli cliente e feed dalla pagina Clienti & Feed e portalo "
+                    "fino all'enrichment, poi torna qui per esportare.",
+        cta_label="Vai a Clienti & Feed →",
+        cta_page="client_pages/clienti.py",
+        cta_key="_export_no_ctx",
+    )
+    st.stop()
 if df is None:
     empty_state(
         icon="📦",

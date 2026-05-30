@@ -2,9 +2,10 @@
 import streamlit as st
 import pandas as pd
 
+from utils import state
 from utils.state import init_state
 from utils.ui import (
-    apply_theme, api_key_banner, empty_state, guarded,
+    apply_theme, api_key_banner, empty_state, guarded, stepper,
     cost_estimate_card, cost_projection_table, LoadingProgress,
 )
 from utils.enrichment import enrich_dataframe, list_sectors, load_sector
@@ -16,6 +17,7 @@ apply_theme()
 api_key_banner()
 
 st.title("Enrichment AI")
+stepper(["Cliente & Sorgente", "Enrichment", "Refine", "Export"], 2)
 st.caption("Classificazione Google Taxonomy + estrazione attributi + riscrittura titoli/descrizioni · Chat con Claude per affinare")
 
 # ============================================================
@@ -29,10 +31,10 @@ _all_clients = _cs.list_clients()
 def _cache_namespace() -> str:
     """Namespace cache PER-CLIENTE (P0.4): isola i risultati tra clienti.
 
-    Se non c'è cliente bound (path senza binding) usa "_session" — isolato e
-    non condiviso tra clienti diversi.
+    Se non c'è cliente attivo (path demo / feed in sessione senza binding)
+    usa "_session" — isolato e non condiviso tra clienti diversi.
     """
-    cslug = st.session_state.get("_enrich_client_slug")
+    cslug, _ = state.get_active()
     return f"client_{cslug}" if cslug else "_session"
 
 
@@ -72,10 +74,9 @@ with st.container():
         _slug_to_name = {c["slug"]: c.get("name", c["slug"]) for c in _all_clients}
         _client_slugs = list(_slug_to_name.keys())
 
-        # default: active client in session, or most-recent
-        default_client = st.session_state.get("_active_client_choice") or _client_slugs[0]
-        if default_client not in _client_slugs:
-            default_client = _client_slugs[0]
+        # default: cliente attivo (contesto unico) se valido, altrimenti il primo
+        _act_client, _act_feed = state.get_active()
+        default_client = _act_client if _act_client in _client_slugs else _client_slugs[0]
 
         sel1, sel2, sel3 = st.columns([2, 2, 1.2])
         chosen_client = sel1.selectbox(
@@ -83,7 +84,7 @@ with st.container():
             options=_client_slugs,
             index=_client_slugs.index(default_client),
             format_func=lambda s: _slug_to_name.get(s, s),
-            key="_active_client_choice",
+            key="_enrich_client_sel",
         )
 
         _feeds = _cs.list_feeds(chosen_client)
@@ -98,9 +99,10 @@ with st.container():
         else:
             _feed_slug_to_name = {f["slug"]: f.get("name", f["slug"]) for f in _feeds}
             _feed_slugs = list(_feed_slug_to_name.keys())
-            # default: sessione o primo
-            default_feed = st.session_state.get("_active_feed_choice") or _feed_slugs[0]
-            if default_feed not in _feed_slugs:
+            # default: feed attivo se appartiene al cliente scelto, altrimenti primo
+            if _act_client == chosen_client and _act_feed in _feed_slugs:
+                default_feed = _act_feed
+            else:
                 default_feed = _feed_slugs[0]
 
             chosen_feed = sel2.selectbox(
@@ -108,8 +110,12 @@ with st.container():
                 options=_feed_slugs,
                 index=_feed_slugs.index(default_feed),
                 format_func=lambda s: _feed_slug_to_name.get(s, s),
-                key="_active_feed_choice",
+                key="_enrich_feed_sel",
             )
+
+            # Promuovi la scelta a contesto attivo (SLUG puri). No-op se
+            # invariato → non resetta i df già caricati in sessione.
+            state.set_active(chosen_client, chosen_feed)
 
             # Info feed selezionato
             _fmeta = next((f for f in _feeds if f["slug"] == chosen_feed), {})
@@ -135,10 +141,12 @@ with st.container():
                     help="Carica questo feed come dataset attivo (sostituisce quello in sessione).",
                 )
 
-            # stato attuale vs selezionato
+            # stato attuale vs selezionato: il contesto attivo coincide con la
+            # scelta corrente e c'è un feed effettivamente caricato in sessione.
+            _act_c_now, _act_f_now = state.get_active()
             _current_bound = (
-                st.session_state.get("_enrich_client_slug") == chosen_client
-                and st.session_state.get("_enrich_feed_slug") == chosen_feed
+                _act_c_now == chosen_client
+                and _act_f_now == chosen_feed
                 and st.session_state.get("feed_df") is not None
             )
             _status_line = (
@@ -154,11 +162,12 @@ with st.container():
                 if loaded_df is None:
                     st.error("Nessun snapshot/enriched disponibile per questo feed.")
                 else:
+                    # set_active prima del load: assicura contesto coerente e
+                    # azzera eventuali df di un contesto precedente.
+                    state.set_active(chosen_client, chosen_feed)
                     st.session_state["feed_df"] = loaded_df
                     st.session_state["enriched_df"] = loaded_df.copy()
                     st.session_state["merged_df"] = None
-                    st.session_state["_enrich_client_slug"] = chosen_client
-                    st.session_state["_enrich_feed_slug"] = chosen_feed
                     _cs.touch_client(chosen_client)
                     st.toast(
                         f"Feed {_feed_slug_to_name[chosen_feed]} caricato "
@@ -569,8 +578,7 @@ if launch:
         # merge_enriched fa UPSERT per _product_key (non perde gli altri
         # prodotti, non si rompe al reload parquet). remove_pending toglie
         # dalla coda SOLO i prodotti effettivamente arricchiti in questo run.
-        client_slug = st.session_state.get("_enrich_client_slug")
-        feed_slug = st.session_state.get("_enrich_feed_slug")
+        client_slug, feed_slug = state.get_active()
         if client_slug and feed_slug:
             try:
                 from utils import clients as _cs

@@ -2,8 +2,9 @@
 import streamlit as st
 import pandas as pd
 
+from utils import state
 from utils.state import init_state
-from utils.ui import apply_theme, api_key_banner, empty_state
+from utils.ui import apply_theme, api_key_banner, empty_state, stepper
 from utils import clients as cs
 from utils import feed_diff
 from utils.feed_parser import load_feed, normalize_columns
@@ -13,6 +14,7 @@ apply_theme()
 api_key_banner()
 
 st.title("Clienti & Feed")
+stepper(["Cliente & Sorgente", "Enrichment", "Refine", "Export"], 1)
 st.caption(
     "Ogni cliente può avere N feed. Ogni sync salva uno snapshot storico e "
     "calcola il delta vs ultimo snapshot: nuovi, modificati, rimossi. "
@@ -21,14 +23,29 @@ st.caption(
 
 # ============================================================
 # SELECTOR CLIENTE
+# Key page-scoped ("_clienti_client_sel") con valore = SLUG puro.
+# Il contesto attivo (cliente, feed) è gestito da utils.state.set_active.
 # ============================================================
 existing = cs.list_clients()
-opts = ["➕ Nuovo cliente..."] + [f"{c['name']}  ({c['slug']})" for c in existing]
-selected = st.selectbox("Cliente attivo", opts, index=1 if len(opts) > 1 else 0,
-                         key="_active_client_choice")
+_NEW_CLIENT = "➕ Nuovo cliente..."
+client_opts = [_NEW_CLIENT] + [c["slug"] for c in existing]
+_client_names = {c["slug"]: c["name"] for c in existing}
+
+# Default: cliente attivo se presente tra le opzioni, altrimenti il primo reale.
+_active_c, _active_f = state.get_active()
+if _active_c in client_opts:
+    _client_default_idx = client_opts.index(_active_c)
+else:
+    _client_default_idx = 1 if len(client_opts) > 1 else 0
+
+selected = st.selectbox(
+    "Cliente attivo", client_opts, index=_client_default_idx,
+    format_func=lambda s: s if s == _NEW_CLIENT else f"{_client_names.get(s, s)}  ({s})",
+    key="_clienti_client_sel",
+)
 
 current_slug: str | None = None
-if selected == "➕ Nuovo cliente...":
+if selected == _NEW_CLIENT:
     with st.form("_new_client_form"):
         new_name = st.text_input("Nome cliente", placeholder="Es. Nike IT, Rossi Auto, Oasi del Pulito")
         new_notes = st.text_area("Note (opz.)", placeholder="Descrizione cliente, referente, eccetera")
@@ -44,7 +61,7 @@ if selected == "➕ Nuovo cliente...":
                 st.error(str(e))
     st.stop()
 else:
-    current_slug = selected.split("(")[-1].strip(" )")
+    current_slug = selected  # ora è lo slug puro
     cs.touch_client(current_slug)
 
 client = cs.get_client(current_slug)
@@ -137,7 +154,8 @@ if st.session_state.get("_show_add_feed"):
                     parsed = normalize_columns(raw)
                     cs.save_snapshot(current_slug, slug, parsed)
                 st.session_state["_show_add_feed"] = False
-                st.session_state["_active_feed_choice"] = slug
+                st.session_state["_clienti_feed_sel"] = slug
+                state.set_active(current_slug, slug)
                 st.success(f"✅ Feed '{nf_name}' creato · {len(parsed)} prodotti caricati")
                 st.rerun()
             except (FileExistsError, ValueError, FileNotFoundError) as e:
@@ -169,7 +187,8 @@ if st.session_state.get("_show_add_feed"):
                         parsed = normalize_columns(raw)
                         cs.save_snapshot(current_slug, slug, parsed)
                         st.session_state["_show_add_feed"] = False
-                        st.session_state["_active_feed_choice"] = slug
+                        st.session_state["_clienti_feed_sel"] = slug
+                        state.set_active(current_slug, slug)
                         st.success(
                             f"✅ Feed '{nf_name}' creato · {len(parsed)} prodotti caricati"
                         )
@@ -217,9 +236,25 @@ st.divider()
 
 # ============================================================
 # DETTAGLIO FEED
+# Key page-scoped ("_clienti_feed_sel") con valore = SLUG puro.
+# La scelta cliente+feed diventa il contesto attivo via set_active.
 # ============================================================
 feed_slugs = [f["slug"] for f in feeds]
-active_feed = st.selectbox("Feed attivo", feed_slugs, key="_active_feed_choice")
+_feed_names = {f["slug"]: f["name"] for f in feeds}
+# Default: feed attivo se è di questo cliente ed esiste tra le opzioni.
+if _active_c == current_slug and _active_f in feed_slugs:
+    _feed_default_idx = feed_slugs.index(_active_f)
+else:
+    _feed_default_idx = 0
+active_feed = st.selectbox(
+    "Feed attivo", feed_slugs, index=_feed_default_idx,
+    format_func=lambda s: _feed_names.get(s, s),
+    key="_clienti_feed_sel",
+)
+# Promuovi la coppia (cliente, feed) scelta a contesto attivo. set_active è
+# no-op se invariato, quindi non resetta i df se l'utente non ha cambiato nulla.
+state.set_active(current_slug, active_feed)
+
 feed = cs.get_feed(current_slug, active_feed)
 if not feed:
     st.error("Feed non trovato.")
@@ -419,8 +454,9 @@ else:
                 # Mark all as selected in the df state
                 pending_df["_product_key"].tolist()
                 st.session_state["_enrich_selected_keys"] = pending_df["_product_key"].tolist()
-                st.session_state["_enrich_feed_slug"] = active_feed
-                st.session_state["_enrich_client_slug"] = current_slug
+                # Contesto già = (current_slug, active_feed): set_active no-op,
+                # non resetta i df. Riconfermato per chiarezza del handoff.
+                state.set_active(current_slug, active_feed)
                 st.switch_page("client_pages/enrichment_ai.py")
 
             if pcol2.button(f"Enrichment selezionati ({len(selected_rows)})",
@@ -429,8 +465,7 @@ else:
                 # Pass selected subset to Enrichment page via session state
                 sel_keys = selected_rows["_product_key"].tolist()
                 st.session_state["_enrich_selected_keys"] = sel_keys
-                st.session_state["_enrich_feed_slug"] = active_feed
-                st.session_state["_enrich_client_slug"] = current_slug
+                state.set_active(current_slug, active_feed)
                 # Load feed_df = snapshot subset
                 sel_rows = pending_df[pending_df["_product_key"].isin(sel_keys)]
                 st.session_state["feed_df"] = sel_rows.drop(

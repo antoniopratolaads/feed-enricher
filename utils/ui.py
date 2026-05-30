@@ -722,7 +722,14 @@ def api_key_banner():
 
 
 def render_sidebar_status():
-    """Compact status panel in sidebar: API key state + active project."""
+    """Compact status panel in sidebar: contesto attivo + stato AI.
+
+    Mostra il cliente/feed attivo (risolti da slug a nome via utils.clients),
+    quanti prodotti sono in sessione e quanti restano da arricchire (status
+    non in ok/cached), più il dot stato API key.
+    """
+    import html
+
     cfg = st.session_state.get("config", {}) or {}
     has_anthropic = bool(cfg.get("anthropic_api_key"))
     has_openai = bool(cfg.get("openai_api_key"))
@@ -730,21 +737,74 @@ def render_sidebar_status():
     api_status = "●  AI pronto" if (has_anthropic or has_openai) else "○  API key mancante"
     api_color = "#10B981" if (has_anthropic or has_openai) else "#EF4444"
 
-    df = st.session_state.get("feed_df")
-    n_products = len(df) if df is not None else 0
-    feed_line = (
-        f"<div style='color:#4B5563; font-size:0.78rem;'>"
-        f"<span style='color:#10B981;'>●</span>&nbsp;&nbsp;Feed: <b>{n_products:,}</b> prodotti</div>"
-        if n_products > 0
-        else "<div style='color:#9CA3AF; font-size:0.78rem;'>○&nbsp;&nbsp;Nessun feed caricato</div>"
-    )
+    # ── Contesto attivo (cliente + feed) ──────────────────────────────
+    # Import locale per evitare cicli di import (clients importa pandas/feed_diff,
+    # ui è importato molto presto da app.py).
+    from utils import state as _state
+    client_slug, feed_slug = _state.get_active()
+
+    if client_slug:
+        try:
+            from utils import clients as _cs
+            _cmeta = _cs.get_client(client_slug)
+            client_name = (_cmeta or {}).get("name") or client_slug
+            if feed_slug:
+                _fmeta = _cs.get_feed(client_slug, feed_slug)
+                feed_name = (_fmeta or {}).get("name") or feed_slug
+            else:
+                feed_name = None
+        except Exception:
+            client_name, feed_name = client_slug, feed_slug
+        ctx_html = (
+            f"<div style='color:#0A0A0F; font-weight:600; font-size:0.82rem; margin-bottom:2px;'>"
+            f"{html.escape(str(client_name))}</div>"
+        )
+        if feed_name:
+            ctx_html += (
+                f"<div style='color:#4B5563; font-size:0.74rem;'>feed: "
+                f"{html.escape(str(feed_name))}</div>"
+            )
+        else:
+            ctx_html += "<div style='color:#9CA3AF; font-size:0.74rem;'>nessun feed selezionato</div>"
+    else:
+        ctx_html = (
+            "<div style='color:#9CA3AF; font-weight:600; font-size:0.82rem;'>"
+            "Nessun cliente attivo</div>"
+        )
+
+    # ── Conteggi prodotti dal df in sessione ──────────────────────────
+    df = st.session_state.get("enriched_df")
+    if df is None:
+        df = st.session_state.get("feed_df")
+    if df is not None:
+        n_products = len(df)
+        if "_enrichment_status" in df.columns:
+            _st = df["_enrichment_status"].astype(str).str.strip().str.lower()
+            n_done = int(_st.isin(["ok", "cached"]).sum())
+        else:
+            n_done = 0
+        n_todo = n_products - n_done
+        feed_line = (
+            f"<div style='color:#4B5563; font-size:0.76rem; margin-top:6px;'>"
+            f"<span style='color:#10B981;'>●</span>&nbsp;&nbsp;<b>{n_products:,}</b> prodotti · "
+            f"<b>{n_todo:,}</b> da arricchire</div>"
+        )
+    else:
+        feed_line = (
+            "<div style='color:#9CA3AF; font-size:0.76rem; margin-top:6px;'>"
+            "○&nbsp;&nbsp;Nessun feed caricato</div>"
+        )
 
     st.markdown(
         f"""
         <div style='background:#F4F5F7; border:1px solid #E5E7EB; border-radius:10px;
                     padding:10px 12px; margin:6px 0 14px; font-size:0.78rem;'>
-            <div style='color:{api_color}; font-weight:600; margin-bottom:4px;'>{api_status}</div>
+            <div style='font-size:0.66rem; color:#9CA3AF; text-transform:uppercase;
+                        letter-spacing:0.06em; font-weight:600; margin-bottom:4px;'>Contesto attivo</div>
+            {ctx_html}
             {feed_line}
+            <div style='border-top:1px solid #E5E7EB; margin:8px 0 6px;'></div>
+            <div style='color:{api_color}; font-weight:600;'>{api_status}</div>
         </div>
         """,
         unsafe_allow_html=True,
