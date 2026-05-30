@@ -79,8 +79,8 @@ if df is None:
         title="Nessun feed caricato",
         description="Carica prima un feed prodotto. Il Catalog Optimizer userà enrichment + label "
                     "per produrre export Google Merchant e Meta Catalog.",
-        cta_label="Vai a Upload Feed →",
-        cta_page="client_pages/upload_feed.py",
+        cta_label="Vai a Clienti & Feed →",
+        cta_page="client_pages/clienti.py",
         cta_key="_empty_upload_opt",
     )
     st.stop()

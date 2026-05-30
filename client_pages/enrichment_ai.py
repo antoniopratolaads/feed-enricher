@@ -26,15 +26,30 @@ st.caption("Classificazione Google Taxonomy + estrazione attributi + riscrittura
 _all_clients = _cs.list_clients()
 
 
+def _cache_namespace() -> str:
+    """Namespace cache PER-CLIENTE (P0.4): isola i risultati tra clienti.
+
+    Se non c'è cliente bound (path senza binding) usa "_session" — isolato e
+    non condiviso tra clienti diversi.
+    """
+    cslug = st.session_state.get("_enrich_client_slug")
+    return f"client_{cslug}" if cslug else "_session"
+
+
+def _style_guide_hash(text: str) -> str:
+    """Hash breve dello style_guide_text per l'extra dell'hash cache."""
+    import hashlib
+    return hashlib.md5((text or "").encode("utf-8")).hexdigest()[:12]
+
+
 def _load_feed_from_client(client_slug: str, feed_slug: str) -> tuple[pd.DataFrame | None, str]:
-    """Carica feed attivo. Preferisce enriched.parquet, fallback snapshot più recente."""
-    enr = _cs.load_enriched(client_slug, feed_slug)
-    if enr is not None and not enr.empty:
-        return enr, "enriched"
-    snap = _cs.get_latest_snapshot(client_slug, feed_slug)
-    if snap is not None and not snap.empty:
-        return snap, "snapshot"
-    return None, ""
+    """Carica feed attivo: overlay enriched→snapshot per _product_key (P0.2).
+
+    Vede i prodotti nuovi (presenti nello snapshot ma non in enriched) e non
+    serve quelli rimossi dal feed. La strategy è quella salvata nel feed.json.
+    """
+    strat = (_cs.get_feed(client_slug, feed_slug) or {}).get("id_strategy", "hierarchical")
+    return _cs.load_feed_merged(client_slug, feed_slug, strategy=strat)
 
 
 with st.container():
@@ -102,9 +117,11 @@ with st.container():
             _snap_count = _fmeta.get("n_snapshots", 0)
             _pending_count = _fmeta.get("n_pending", 0)
             _has_enriched = _enr_preview is not None and not _enr_preview.empty
-            _n_rows_available = len(_enr_preview) if _has_enriched else (
-                len(_cs.get_latest_snapshot(chosen_client, chosen_feed) or [])
-            )
+            if _has_enriched:
+                _n_rows_available = len(_enr_preview)
+            else:
+                _snap_preview = _cs.get_latest_snapshot(chosen_client, chosen_feed)
+                _n_rows_available = len(_snap_preview) if _snap_preview is not None else 0
 
             # CTA carica
             with sel3:
@@ -156,9 +173,9 @@ if st.session_state.get("feed_df") is None:
         icon="📦",
         title="Nessun feed caricato",
         description="Carica prima un feed prodotto per poter lanciare l'enrichment AI. "
-                    "Puoi caricare un URL/file o usare il dataset demo.",
-        cta_label="Vai a Upload Feed →",
-        cta_page="client_pages/upload_feed.py",
+                    "Crea cliente/feed e sincronizza da Clienti & Feed.",
+        cta_label="Vai a Clienti & Feed →",
+        cta_page="client_pages/clienti.py",
         cta_key="_empty_upload",
     )
     st.stop()
@@ -381,16 +398,16 @@ st.markdown("### ⚙️ Configurazione enrichment")
 st.caption("Scelte che impattano costo e qualità output.")
 
 cfg1, cfg2, cfg3 = st.columns(3)
+# Solo modelli Anthropic: enrich_product chiama sempre l'API Anthropic, i
+# modelli OpenAI generavano solo errori.
 _ALL_MODELS = [
     "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
-    "claude-haiku-3-5", "gpt-5", "gpt-5-mini", "gpt-5-nano",
-    "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini",
-    "o3", "o3-mini", "o4-mini",
+    "claude-haiku-3-5",
 ]
 model = cfg1.selectbox(
     "🤖 Modello AI", _ALL_MODELS,
     index=_ALL_MODELS.index("claude-sonnet-4-6"),
-    help="Sonnet 4.6 = sweet spot (€3-15/M tok). Haiku 4.5 / gpt-4.1-nano = economici.",
+    help="Sonnet 4.6 = sweet spot (€3-15/M tok). Haiku 4.5 = economico.",
 )
 sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
 default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
@@ -460,11 +477,14 @@ n_selected = len(selected_indices)
 cached_rows: dict = {}
 n_hit = 0
 n_miss = n_selected
+_cache_ns = _cache_namespace()
+_style_extra = _style_guide_hash(style_guide_text)
 if n_selected > 0 and use_cache:
     try:
         cached_rows, _ = enrich_cache.get_cached(
-            df.loc[selected_indices], namespace="shared_v1",
+            df.loc[selected_indices], namespace=_cache_ns,
             model=model, sector=sector, provider="anthropic",
+            target=target_choice, extra=_style_extra,
         )
         n_hit = len(cached_rows)
         n_miss = n_selected - n_hit
@@ -491,8 +511,8 @@ launch = lc1.button(
     disabled=(n_selected == 0),
 )
 if lc2.button("🧹 Pulisci cache", use_container_width=True,
-                help="Rimuove tutti i risultati cached — forza re-enrichment."):
-    enrich_cache.clear("shared_v1")
+                help="Rimuove i risultati cached del cliente attivo — forza re-enrichment."):
+    enrich_cache.clear(_cache_ns)
     st.toast("Cache pulita", icon="🧹")
     st.rerun()
 
@@ -522,8 +542,9 @@ if launch:
                     result = {k: row.get(k) for k in row.index
                               if k not in ("_enrichment_status",) and pd.notna(row.get(k))}
                     pairs.append((src, result))
-                enrich_cache.store(pairs, namespace="shared_v1",
-                                     model=model, sector=sector, provider="anthropic")
+                enrich_cache.store(pairs, namespace=_cache_ns,
+                                     model=model, sector=sector, provider="anthropic",
+                                     target=target_choice, extra=_style_extra)
             except Exception:
                 pass
 
@@ -535,19 +556,19 @@ if launch:
                             enriched_subset.at[idx, k] = v
                     enriched_subset.at[idx, "_enrichment_status"] = "cached"
 
-        # Merge subset nel df principale
+        # Merge subset nel df principale (vista immediata in sessione).
+        # NB: per la persistenza usiamo clients.merge_enriched (upsert per
+        # _product_key); qui il merge per indice serve solo alla vista corrente
+        # perché selected_df/enriched_subset condividono l'indice di df.
         for col in enriched_subset.columns:
             if col not in df.columns:
                 df[col] = ""
             df.loc[enriched_subset.index, col] = enriched_subset[col]
 
-        st.session_state["feed_df"] = df
-        st.session_state["enriched_df"] = df
-        st.session_state["merged_df"] = None
-        from utils.history import save_snapshot
-        save_snapshot(st.session_state["session_id"], st.session_state)
-
-        # Hook client integration
+        # Hook client integration: enriched.parquet è la fonte di verità.
+        # merge_enriched fa UPSERT per _product_key (non perde gli altri
+        # prodotti, non si rompe al reload parquet). remove_pending toglie
+        # dalla coda SOLO i prodotti effettivamente arricchiti in questo run.
         client_slug = st.session_state.get("_enrich_client_slug")
         feed_slug = st.session_state.get("_enrich_feed_slug")
         if client_slug and feed_slug:
@@ -555,12 +576,21 @@ if launch:
                 from utils import clients as _cs
                 from utils import feed_diff as _fd
                 strat = (_cs.get_feed(client_slug, feed_slug) or {}).get("id_strategy", "hierarchical")
-                enriched_keys = [_fd.product_key(r.to_dict(), strategy=strat)
-                                  for _, r in df.iterrows()]
-                _cs.remove_pending(client_slug, feed_slug, enriched_keys)
-                _cs.save_enriched(client_slug, feed_slug, df)
+                merged = _cs.merge_enriched(client_slug, feed_slug, enriched_subset, strategy=strat)
+                df = merged
+                # P1.3: rimuovi dalla coda solo le key dei prodotti ok/cached
+                done = enriched_subset[enriched_subset.get(
+                    "_enrichment_status", pd.Series(dtype=str)
+                ).astype(str).str.strip().str.lower().isin(["ok", "cached"])]
+                done_keys = [_fd.product_key(r.to_dict(), strategy=strat)
+                              for _, r in done.iterrows()]
+                _cs.remove_pending(client_slug, feed_slug, done_keys)
             except Exception:
                 pass
+
+        st.session_state["feed_df"] = df
+        st.session_state["enriched_df"] = df
+        st.session_state["merged_df"] = None
 
         st.success(f"✅ Completato · {n_hit} da cache, {n_miss} elaborati AI")
         st.rerun()
