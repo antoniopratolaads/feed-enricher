@@ -207,6 +207,24 @@ if df is None or df.empty:
     df = st.session_state["feed_df"].copy()
     st.session_state["enriched_df"] = df
 
+# ── P0 selezione: normalizza l'index a RangeIndex 0..n-1 stabile e UNIVOCO ──
+# L'identità di selezione è l'indice-riga del df. Il df arriva da
+# parquet/merge_enriched/load_feed_merged e NON garantisce un index 0..n-1:
+# dopo un round-trip parquet o un concat l'index può avere duplicati o buchi.
+# Con index NON univoco lo slice di pagina (filtered.iloc[...]) può contenere un
+# valore che ricompare su un'altra pagina → la selezione "si sposta" sul
+# prodotto sbagliato e df.loc[selected_indices] restituisce più righe per lo
+# stesso indice (regressione P0). reset_index(drop=True) rende l'index 0..n-1
+# univoco e stabile, coerente fra df, slice di pagina e launch.
+# È SAFE per la persistenza: merge_enriched fa upsert per _product_key (non per
+# indice), quindi reindicizzare non cambia nulla a valle. Riscriviamo lo STESSO
+# oggetto reindicizzato in sessione così anche il merge per-indice della vista
+# (df.loc[enriched_subset.index]) e il launch (df.loc[selected_indices])
+# lavorano sullo STESSO spazio di indici stabile.
+if not (isinstance(df.index, pd.RangeIndex) and df.index.is_unique):
+    df = df.reset_index(drop=True)
+    st.session_state["enriched_df"] = df
+
 # ============================================================
 # HEADER METRICS
 # ============================================================
@@ -230,9 +248,14 @@ st.caption(
 
 # ============================================================
 # PRODUCT CARD GRID (Fase 2c)
-# Selezione per product_key (mai per indice) → persiste tra
-# pagine/filtri/vista. selected_indices ricostruito alla fine per il
-# launch a valle (df.loc[selected_indices]).
+# IDENTITÀ DI SELEZIONE = INDICE DI RIGA del df (univoco e stabile in
+# sessione). Niente product_key per la selezione: con strategy 'hash'
+# (fallback) due prodotti distinti senza id/gtin/mpn ma con stesso
+# title|brand|price collasserebbero sulla stessa key → enrichment su N
+# righe invece di 1 (costo ×N, dato sbagliato sul "gemello"). L'indice
+# evita la collisione.
+# product_key resta usato SOLO per il match col preset "Da arricchire"
+# (intersezione con la coda pending del feed).
 # ============================================================
 import html as _html
 
@@ -261,27 +284,56 @@ def _STATUS_TEXT(status) -> str:
     return "○ Grezzo"
 
 
-def _row_product_key(row: dict) -> str:
-    """product_key coerente con feed_diff (stesso match di pending/merge).
+# --- product_keys MEMOIZZATE su fingerprint del df (solo per match pending) ---
+# Le key servono SOLO al preset "Da arricchire" (intersezione con la coda),
+# non per identificare la selezione → cache-arle è sicuro. Il fingerprint
+# cambia quando il df cambia (es. dopo enrichment) → le key si ricalcolano.
+def _df_fingerprint(_df: pd.DataFrame) -> str:
+    """Fingerprint stabile per cache key (hash contenuto + shape)."""
+    try:
+        import hashlib
+        h = pd.util.hash_pandas_object(_df, index=True).values
+        return hashlib.md5(h.tobytes()).hexdigest() + f"_{_df.shape[0]}x{_df.shape[1]}"
+    except Exception:
+        return f"{_df.shape[0]}x{_df.shape[1]}_{hash(tuple(_df.columns))}"
 
-    Se la key risultasse vuota (es. strategy 'id' senza id) cade su un hash
-    stabile del contenuto così la card resta sempre selezionabile.
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_pkeys(fp: str, strategy: str, _df: pd.DataFrame) -> pd.Series:
+    """Series _pkey allineata all'index del df (memoizzata su fingerprint).
+
+    `_df` ha l'underscore così Streamlit non prova a hasharlo: la cache key
+    reale è `fp` (+ strategy). Usa product_keys_for_df di feed_diff così la
+    key coincide con quella di pending/merge_enriched.
     """
     from utils import feed_diff as _fd
-    k = _fd.product_key(row, strategy=_pk_strategy)
-    if not k or k == "h:":
-        k = _fd.product_key(row, strategy="hash")
-    return k
+    keys = _fd.product_keys_for_df(_df, strategy=strategy)
+    # Fallback per le righe la cui key è vuota (es. strategy 'id' senza id):
+    # hash del contenuto, coerente con feed_diff.product_key(strategy='hash').
+    empty = keys.isin(["", "h:"]) | keys.isna()
+    if empty.any():
+        recs = _df.loc[empty].to_dict("records")
+        keys.loc[empty] = [_fd.product_key(r, strategy="hash") for r in recs]
+    return keys
 
 
-# Precalcola la Series _pkey UNA volta (riusata per pending + ricostruzione).
-_pkey = df.apply(lambda r: _row_product_key(r.to_dict()), axis=1)
-_pkey.name = "_pkey"
+_pkey = _cached_pkeys(_df_fingerprint(df), _pk_strategy, df)
 
-# Set fonte di verità della selezione.
-if "selected_keys" not in st.session_state:
-    st.session_state["selected_keys"] = set()
-selected_keys: set = st.session_state["selected_keys"]
+# ── IDENTITÀ DI SELEZIONE = set di INDICI-RIGA del df (univoci/stabili) ──────
+# Fonte di verità unica. Selezionare una card seleziona ESATTAMENTE quella
+# riga, mai la gemella con stesso title|brand|price.
+if "selected_row_ids" not in st.session_state:
+    st.session_state["selected_row_ids"] = set()
+selected_row_ids: set = st.session_state["selected_row_ids"]
+# Tieni solo indici ancora presenti nel df (dopo reload il df cambia index).
+selected_row_ids &= set(df.index)
+
+# ── HANDOFF da clienti.py (Fix 4): _enrich_selected_keys (lista di
+# product_key dei pending) → traduci in indici-riga UNA volta e consuma. ──────
+_handoff_keys = st.session_state.pop("_enrich_selected_keys", None)
+if _handoff_keys:
+    _hk = set(_handoff_keys)
+    selected_row_ids |= set(_pkey[_pkey.isin(_hk)].index.tolist())
 
 # Coda pending del feed attivo (stesse key di feed_diff) → preset "Da arricchire".
 _pending_keys: set = set()
@@ -295,17 +347,34 @@ if _act_client_pk and _act_feed_pk:
         _pending_keys = set()
 
 
-# ── Callback selezione: legge dalla key del widget, muta solo il set ──────────
-def _toggle_card(pkey: str, widget_key: str) -> None:
+# ── selection_version: token che cambia su bulk/filtro/preset/pagina così i
+# checkbox dello slice si RICREANO con il value corretto (Fix 3). Senza, una
+# widget-key già in session_state ignora il nuovo value= → card accesa /
+# checkbox vuoto dopo "Seleziona pagina"/"Deseleziona tutto". ──────────────────
+if "_sel_version" not in st.session_state:
+    st.session_state["_sel_version"] = 0
+
+
+def _bump_sel_version() -> None:
+    st.session_state["_sel_version"] = st.session_state.get("_sel_version", 0) + 1
+
+
+# ── Callback selezione card: legge la key del widget, muta solo il set ──────
+def _toggle_card(row_id, widget_key: str) -> None:
     if st.session_state.get(widget_key):
-        selected_keys.add(pkey)
+        selected_row_ids.add(row_id)
     else:
-        selected_keys.discard(pkey)
+        selected_row_ids.discard(row_id)
 
 
 def _reset_page() -> None:
-    """Torna a pagina 1 quando cambiano preset/filtri/vista/page-size."""
+    """Torna a pagina 1 quando cambiano preset/filtri/vista/page-size.
+
+    Bump anche selection_version: i checkbox dello slice si ricreano con il
+    value coerente (evita key vecchie spuntate su prodotto diverso).
+    """
     st.session_state["_card_page"] = 1
+    _bump_sel_version()
 
 
 # ============================================================
@@ -365,8 +434,7 @@ elif preset == "⚠ Errori":
     mask &= _status_lower.str.startswith("error")
 # "Tutti" → nessun vincolo di stato
 
-filtered = df[mask].copy()
-filtered_keys = _pkey[mask]  # Series allineata a filtered (stesso index)
+filtered = df[mask].copy()  # mantiene l'index originale del df = id di selezione
 
 # ============================================================
 # VIEW SETUP — pagina, page-size, vista (card/tabella)
@@ -376,7 +444,7 @@ if "_card_page" not in st.session_state:
 
 # Fascia 3: contatore + azioni bulk + vista + page size
 n_visible = len(filtered)
-n_selected_live = len(selected_keys)
+n_selected_live = len(selected_row_ids)
 tc1, tc2 = st.columns([3, 2])
 tc1.markdown(
     f"<div style='padding-top:6px; font-size:0.9rem; color:#4B5563;'>"
@@ -410,15 +478,17 @@ page = min(max(int(st.session_state.get("_card_page", 1)), 1), total_pages)
 st.session_state["_card_page"] = page
 start = (page - 1) * page_size
 page_slice = filtered.iloc[start:start + page_size]
-page_keys = filtered_keys.iloc[start:start + page_size].tolist()
+page_ids = page_slice.index.tolist()  # indici-riga = id di selezione dello slice
 
 if ac1.button("Seleziona pagina", use_container_width=True, key="_sel_page",
                disabled=page_slice.empty):
-    selected_keys.update(page_keys)
+    selected_row_ids.update(page_ids)
+    _bump_sel_version()  # ricrea i checkbox dello slice col value aggiornato
     st.rerun()
 if ac2.button("Deseleziona tutto", use_container_width=True, key="_sel_none",
-               disabled=not selected_keys):
-    selected_keys.clear()
+               disabled=not selected_row_ids):
+    selected_row_ids.clear()
+    _bump_sel_version()
     st.rerun()
 
 # ============================================================
@@ -438,14 +508,15 @@ if filtered.empty:
         )
 elif view == "☰ Tabella":
     # ============================================================
-    # VISTA TABELLA — data_editor sullo STESSO selected_keys.
+    # VISTA TABELLA — data_editor sullo STESSO selected_row_ids.
     # La selezione in tabella riconcilia il set SENZA perdere altre pagine.
     # ============================================================
     base_cols = [c for c in ("image_link", "id", "title", "brand", "price")
                   if c in page_slice.columns]
     tbl = page_slice[base_cols].copy()
-    tbl.insert(0, "_pkey", page_keys)
-    tbl.insert(0, "Seleziona", [k in selected_keys for k in page_keys])
+    # _rowid = indice-riga del df (id di selezione univoco), non product_key.
+    tbl.insert(0, "_rowid", page_ids)
+    tbl.insert(0, "Seleziona", [rid in selected_row_ids for rid in page_ids])
     tbl["Stato"] = page_slice.get(
         "_enrichment_status", pd.Series([""] * len(page_slice), index=page_slice.index)
     ).apply(lambda s: _STATUS_TEXT(s))
@@ -455,7 +526,7 @@ elif view == "☰ Tabella":
                 else st.column_config.TextColumn("Img", width="small"))
     _tbl_cfg = {
         "Seleziona": st.column_config.CheckboxColumn("☑", width="small", pinned=True),
-        "_pkey": None,  # nascondi key tecnica
+        "_rowid": None,  # nascondi id tecnico
         "image_link": _img_col,
         "id": st.column_config.TextColumn("ID", width="small"),
         "title": st.column_config.TextColumn("Title", width="large"),
@@ -463,24 +534,29 @@ elif view == "☰ Tabella":
         "price": st.column_config.TextColumn("Prezzo", width="small"),
         "Stato": st.column_config.TextColumn("Stato", width="small", pinned=True),
     }
+    # key dipende da selection_version → la tabella si ricrea col value
+    # corretto dopo bulk/filtro/preset (Fix 3), senza perdere altre pagine.
+    _sv = st.session_state["_sel_version"]
     edited = st.data_editor(
         tbl, use_container_width=True, height=520, hide_index=True,
         column_config=_tbl_cfg,
         disabled=[c for c in tbl.columns if c != "Seleziona"],
-        key=f"_edit_table_{page}_{page_size}",
+        key=f"_edit_table_{page}_{page_size}_{_sv}",
     )
-    # Riconcilia SOLO le key di questa pagina (non sovrascrivere altre pagine).
-    for _k, _sel in zip(edited["_pkey"].tolist(), edited["Seleziona"].tolist()):
+    # Riconcilia SOLO le righe di questa pagina (non toccare altre pagine).
+    for _rid, _sel in zip(edited["_rowid"].tolist(), edited["Seleziona"].tolist()):
         if _sel:
-            selected_keys.add(_k)
+            selected_row_ids.add(_rid)
         else:
-            selected_keys.discard(_k)
+            selected_row_ids.discard(_rid)
 else:
     # ============================================================
     # VISTA CARD — st.columns(4) fisso; card HTML + checkbox nativo.
     # Renderizza SOLO lo slice (max 48) → rischio #1 risolto.
     # ============================================================
-    rows = page_slice.reset_index(drop=True)
+    # NB: NON reset_index → l'index resta l'id di selezione di ogni riga.
+    rows = page_slice
+    _sv = st.session_state["_sel_version"]
     for block_start in range(0, len(rows), 4):
         cols = st.columns(4)
         for col_i in range(4):
@@ -488,8 +564,8 @@ else:
             if r_i >= len(rows):
                 continue
             row = rows.iloc[r_i]
-            pkey = page_keys[r_i]
-            is_sel = pkey in selected_keys
+            row_id = page_ids[r_i]  # indice-riga = id di selezione univoco
+            is_sel = row_id in selected_row_ids
 
             # Immagine: image_link → additional_image_link, solo https.
             img_url = ""
@@ -533,15 +609,18 @@ else:
             )
             with cols[col_i]:
                 st.markdown(card_html, unsafe_allow_html=True)
-                wkey = f"sel_{pkey}_{page}"
+                # widget-key include row_id (univoco) + selection_version: si
+                # ricrea col value corretto dopo bulk/filtro (Fix 3).
+                wkey = f"sel_{row_id}_{page}_{_sv}"
                 st.checkbox("Seleziona", value=is_sel, key=wkey,
-                             on_change=_toggle_card, args=(pkey, wkey))
+                             on_change=_toggle_card, args=(row_id, wkey))
 
     # ── Paginazione (in fondo) ──────────────────────────────────────────────
     nav_prev, nav_mid, nav_next = st.columns([1, 2, 1])
     if nav_prev.button("‹ Precedente", use_container_width=True,
                         key="_pg_prev", disabled=(page <= 1)):
         st.session_state["_card_page"] = page - 1
+        _bump_sel_version()  # i checkbox della nuova pagina nascono col value giusto
         st.rerun()
     nav_mid.markdown(
         f"<div style='text-align:center; padding-top:8px; color:#4B5563; "
@@ -551,14 +630,15 @@ else:
     if nav_next.button("Successiva ›", use_container_width=True,
                         key="_pg_next", disabled=(page >= total_pages)):
         st.session_state["_card_page"] = page + 1
+        _bump_sel_version()
         st.rerun()
 
 # ============================================================
-# RICOSTRUZIONE selected_indices (contratto launch a valle)
-# Indici del df il cui product_key ∈ selected_keys. Riusa la Series
-# _pkey precalcolata (no iterrows). Valido dopo cambio pagina/filtro.
+# selected_indices (contratto launch a valle): la selezione È GIÀ per
+# indice-riga, quindi è l'intersezione col df corrente. df.loc[...] riceve
+# ESATTAMENTE le righe spuntate (mai la gemella → Fix BLOCCANTE).
 # ============================================================
-selected_indices = _pkey[_pkey.isin(selected_keys)].index.tolist()
+selected_indices = [i for i in df.index if i in selected_row_ids]
 
 # ============================================================
 # CONFIGURAZIONE — sempre visibile (modello, settore, target)

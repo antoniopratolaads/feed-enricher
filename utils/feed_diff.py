@@ -91,6 +91,20 @@ def product_key(row, strategy: str = "hierarchical") -> str:
     return "h:" + hashlib.md5(blob.encode()).hexdigest()[:16]
 
 
+def product_keys_for_df(df: pd.DataFrame, strategy: str = "hierarchical") -> pd.Series:
+    """Return a Series of product keys aligned to ``df.index``.
+
+    Vettorizza il calcolo di :func:`product_key` su tutto il DataFrame in un colpo
+    solo (un solo passaggio per riga). Pensata per il match con la coda pending e
+    per essere memoizzata a monte (vedi enrichment_ai.py) così non gira a ogni
+    rerun. La Series mantiene l'index originale del df per join/maschere sicure.
+    """
+    if df is None or df.empty:
+        return pd.Series([], dtype=str, name="_pkey")
+    keys = [product_key(row, strategy=strategy) for row in df.to_dict("records")]
+    return pd.Series(keys, index=df.index, name="_pkey")
+
+
 def _content_hash(row) -> str:
     get = (lambda k: _clean(row.get(k))) if isinstance(row, dict) else (lambda k: _clean(row.get(k) if hasattr(row, "get") else ""))
     payload = "|".join(get(k) for k in _CONTENT_FIELDS)
