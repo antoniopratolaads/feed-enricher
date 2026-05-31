@@ -1186,10 +1186,11 @@ def cost_projection_table(n_rows: int):
 # tabella §3 della DESIGN_SPEC_FASE2: stesso linguaggio cromatico in
 # card, tabella, sidebar, metriche.
 _STATUS_STYLES = {
-    "grezzo":     ("Grezzo",      "#9CA3AF", "#F4F5F7", "○"),  # var(--text-muted)/var(--bg-subtle)
-    "arricchito": ("Arricchito",  "#10B981", "#ECFDF5", "●"),  # var(--success)/var(--success-bg)
-    "errore":     ("Errore",      "#EF4444", "#FEF2F2", "✕"),  # var(--danger)/var(--danger-bg)
-    "rivedere":   ("Da rivedere", "#F59E0B", "#FFFBEB", "!"),  # var(--warning)/var(--warning-bg)
+    "grezzo":        ("Grezzo",        "#9CA3AF", "#F4F5F7", "○"),  # var(--text-muted)/var(--bg-subtle)
+    "arricchito":    ("Arricchito",    "#10B981", "#ECFDF5", "●"),  # var(--success)/var(--success-bg)
+    "errore":        ("Errore",        "#EF4444", "#FEF2F2", "✕"),  # var(--danger)/var(--danger-bg)
+    "rivedere":      ("Da rivedere",   "#F59E0B", "#FFFBEB", "!"),  # var(--warning)/var(--warning-bg)
+    "pronto_export": ("Pronto export", "#2F6FED", "#EEF4FF", "✓"),  # var(--blue-500)/var(--blue-50)
 }
 
 
@@ -1209,20 +1210,51 @@ def _status_kind(status: str) -> str:
     return "grezzo"
 
 
-def status_badge(status: str) -> str:
-    """Return an HTML <span> soft badge per lo stato enrichment dato.
-
-    Sfondo soft (`*-bg`), testo nel colore pieno (leggibile sul soft),
-    icona unicode + label. Usato nelle product card e ovunque serva il
-    badge stato coerente. Restituisce SEMPRE markup valido (default Grezzo).
-    """
-    label, color, bg, icon = _STATUS_STYLES[_status_kind(status)]
+def _render_status_span(key: str) -> str:
+    """Markup <span> soft condiviso, data una chiave di _STATUS_STYLES."""
+    label, color, bg, icon = _STATUS_STYLES[key]
     return (
         f"<span style='display:inline-flex; align-items:center; gap:4px; "
         f"background:{bg}; color:{color}; font-size:0.7rem; font-weight:600; "
         f"padding:2px 8px; border-radius:8px; line-height:1.4; white-space:nowrap;'>"
         f"<span style='font-size:0.8em;'>{icon}</span>{label}</span>"
     )
+
+
+def status_badge(status: str) -> str:
+    """Return an HTML <span> soft badge per lo stato enrichment dato.
+
+    Sfondo soft (`*-bg`), testo nel colore pieno (leggibile sul soft),
+    icona unicode + label. Usato nelle product card e ovunque serva il
+    badge stato coerente. Restituisce SEMPRE markup valido (default Grezzo).
+    Resta a 4 stati (asse `_enrichment_status`): non include pronto_export.
+    """
+    return _render_status_span(_status_kind(status))
+
+
+def export_status_badge(enrichment_status: str, level: str) -> str:
+    """Badge combinato: asse enrichment (errore/rivedere) + asse export (level).
+
+    Precedenza (§5 spec, dall'alto):
+      1. _enrichment_status inizia con 'error' → Errore
+      2. _enrichment_status ∈ {cached, stale}  → Da rivedere
+      3. level == 'pronto_export'              → Pronto export
+      4. level == 'arricchito'                 → Arricchito
+      5. else (grezzo/empty)                   → Grezzo
+    """
+    s = str(enrichment_status or "").strip().lower()
+    lvl = str(level or "").strip().lower()
+    if s.startswith("error"):
+        key = "errore"
+    elif s in ("cached", "stale"):
+        key = "rivedere"
+    elif lvl == "pronto_export":
+        key = "pronto_export"
+    elif lvl == "arricchito":
+        key = "arricchito"
+    else:
+        key = "grezzo"
+    return _render_status_span(key)
 
 
 # ============================================================

@@ -7,7 +7,9 @@ from utils.state import init_state
 from utils.ui import (
     apply_theme, api_key_banner, empty_state, guarded, stepper,
     cost_estimate_card, cost_projection_table, LoadingProgress, status_badge,
+    export_status_badge,
 )
+from utils.catalog_optimizer import compute_export_status
 from utils.enrichment import enrich_dataframe, list_sectors, load_sector
 from utils import cache as enrich_cache
 from utils import clients as _cs
@@ -269,18 +271,22 @@ else:
     _pk_strategy = "id"  # demo / feed non bindato: id stabile come key
 
 
-def _STATUS_TEXT(status) -> str:
+def _STATUS_TEXT(status, level: str = "") -> str:
     """Compromesso testuale per la cella Stato in tabella (no HTML).
 
-    Pallino unicode + label, palette §3 coerente con status_badge.
+    Combina asse enrichment (`_enrichment_status`) + livello export (`level`),
+    stessa precedenza di export_status_badge §5. Palette coerente con i badge.
     """
     s = str(status or "").strip().lower()
-    if s == "ok":
-        return "● Arricchito"
+    lvl = str(level or "").strip().lower()
     if s.startswith("error"):
         return "✕ Errore"
     if s in ("cached", "stale"):
-        return "! Da rivedere"
+        return "↻ Da rivedere"
+    if lvl == "pronto_export":
+        return "✓ Pronto export"
+    if lvl == "arricchito":
+        return "● Arricchito"
     return "○ Grezzo"
 
 
@@ -517,9 +523,15 @@ elif view == "☰ Tabella":
     # _rowid = indice-riga del df (id di selezione univoco), non product_key.
     tbl.insert(0, "_rowid", page_ids)
     tbl.insert(0, "Seleziona", [rid in selected_row_ids for rid in page_ids])
-    tbl["Stato"] = page_slice.get(
-        "_enrichment_status", pd.Series([""] * len(page_slice), index=page_slice.index)
-    ).apply(lambda s: _STATUS_TEXT(s))
+    # Stato per-prodotto sullo SLICE visibile (24/48), non su tutto il df:
+    # combina asse enrichment + livello export (compute_export_status per riga).
+    tbl["Stato"] = [
+        _STATUS_TEXT(
+            page_slice.iloc[i].get("_enrichment_status", ""),
+            compute_export_status(page_slice.iloc[i])[0],
+        )
+        for i in range(len(page_slice))
+    ]
 
     _img_col = (st.column_config.ImageColumn("Img", width="small")
                 if hasattr(st.column_config, "ImageColumn")
@@ -598,11 +610,14 @@ else:
 
             check_html = "<div class='pc-check'>✓</div>" if is_sel else ""
             sel_cls = " is-selected" if is_sel else ""
+            # Status export calcolato SOLO sulla riga visibile (slice 24/48),
+            # non sull'intero catalogo: la card è già limitata alla pagina.
+            _exp_level = compute_export_status(row)[0]
             card_html = (
                 f"<div class='preview-card product-card{sel_cls}'>"
                 f"{check_html}{img_html}"
                 f"<div class='pc-body'>"
-                f"{status_badge(row.get('_enrichment_status', ''))}"
+                f"{export_status_badge(row.get('_enrichment_status', ''), _exp_level)}"
                 f"<div class='pc-title'>{title_txt}</div>"
                 f"{brand_html}{price_html}"
                 f"</div></div>"
