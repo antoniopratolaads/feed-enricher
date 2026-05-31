@@ -157,7 +157,7 @@ with col_a:
         unsafe_allow_html=True,
     )
     if st.button("Inizia ora →", type="primary", use_container_width=True, key="_cta_wizard"):
-        st.switch_page("client_pages/upload_feed.py")
+        st.switch_page("client_pages/clienti.py")
 
 with col_b:
     st.markdown(
@@ -218,11 +218,11 @@ with col_left:
     st.markdown("### Checklist setup")
     items = [
         ("Feed prodotto caricato", df_loaded,
-         "XML · CSV · TSV · JSON · Excel · da URL o file", "client_pages/upload_feed.py"),
+         "XML · CSV · TSV · JSON · Excel · da URL o file", "client_pages/clienti.py"),
         ("API Key Claude configurata", api_ok,
          "Per la generazione AI. Salvata solo in locale.", "client_pages/settings.py"),
         ("Progetto salvato", project_named,
-         "Dai un nome al progetto per riaprirlo quando vuoi.", "client_pages/progetti.py"),
+         "Dai un nome al progetto per riaprirlo quando vuoi.", "client_pages/clienti.py"),
     ]
     for title, ok, desc, target in items:
         icon = "●" if ok else "○"
@@ -296,8 +296,8 @@ if df is not None:
     c[3].metric("Sessione", st.session_state["session_id"][-8:])
 
     col_a, col_b = st.columns(2)
-    if col_a.button("Continua nel wizard →", type="primary", use_container_width=True,
+    if col_a.button("Continua →", type="primary", use_container_width=True,
                     key="_cta_continue"):
-        st.switch_page("client_pages/upload_feed.py")
-    if col_b.button("Gestisci progetti", use_container_width=True, key="_cta_projects"):
+        st.switch_page("client_pages/clienti.py")
+    if col_b.button("Gestisci clienti", use_container_width=True, key="_cta_projects"):
         st.switch_page("client_pages/clienti.py")

@@ -120,16 +120,16 @@ with t2:
     st.markdown("## Pipeline Cliente — flusso principale")
 
     steps_cli = [
-        ("Upload Feed",
-         "Carica il catalogo prodotto da URL (Shopify `/products.json`, Magento, WooCommerce) "
-         "oppure da file. Formati supportati: XML (RSS/GMC), CSV, TSV, JSON, Excel multi-foglio. "
-         "Il parser **normalizza i nomi delle colonne** (es. `prezzo` → `price`, `titolo` → `title`) "
-         "e salva il feed originale."),
+        ("Clienti & Feed",
+         "Crea un cliente e i suoi feed. Carica il catalogo prodotto da URL (Shopify "
+         "`/products.json`, Magento, WooCommerce) oppure da file. Formati supportati: XML "
+         "(RSS/GMC), CSV, TSV, JSON, Excel multi-foglio. Il parser **normalizza i nomi delle "
+         "colonne** (es. `prezzo` → `price`, `titolo` → `title`) e salva uno snapshot del feed."),
 
-        ("Wizard Enrichment",
-         "Flusso lineare 4-step consigliato: Progetto → Upload → Enrichment AI → Scarica Catalogo. "
-         "Salvataggio automatico ad ogni step. Puoi interrompere e riprendere in qualsiasi momento "
-         "dalla pagina Progetti."),
+        ("Sync & coda",
+         "Ad ogni sync il feed viene confrontato con lo snapshot precedente: prodotti nuovi e "
+         "modificati finiscono in coda (pending) per l'enrichment. enriched.parquet è la fonte di "
+         "verità cumulativa, mergiata per `_product_key` (id → gtin → mpn → hash)."),
 
         ("Enrichment AI",
          "Claude processa ogni prodotto e restituisce JSON strutturato con campi **ufficiali** Google/Meta: "
@@ -256,13 +256,13 @@ with t5:
     feats = [
         ("Cache hash enrichment",
          "`utils/cache.py` — hash(id + title + description + brand + attributi + model + sector). "
-         "Namespace condiviso `shared_v1`. Pulibile da Enrichment AI."),
+         "Namespace per-cliente (`client_<slug>`). Pulibile da Enrichment AI."),
         ("Prompt templates versioning",
          "`utils/prompts.py` — ogni settore ha versioni numerate del system prompt. Editor in "
          "Settings → tab Prompt templates. Attiva/disattiva/elimina per versione."),
         ("SQLite index cross-sessione",
          "`utils/sqlite_store.py` — mirror indicizzato dei JSONL history. Ricerca per project_name / "
-         "session_id. Rebuild da Progetti. Trasparente: JSONL resta source of truth."),
+         "session_id. Trasparente: JSONL resta source of truth."),
         ("Error boundary",
          "`guarded()` context manager — cattura exception → card rossa + traceback collapsible. "
          "Niente Streamlit stacktrace brutto in produzione."),

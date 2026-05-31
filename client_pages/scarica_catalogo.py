@@ -3,11 +3,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+from utils import state
 from utils.state import init_state, current_df
-from utils.ui import apply_theme, empty_state
+from utils.ui import apply_theme, empty_state, stepper
 from utils.catalog_optimizer import (
     build_google_feed, build_meta_feed, validate_feed, title_quality_check,
-    GOOGLE_FIELDS,
+    add_export_status_columns, GOOGLE_FIELDS,
 )
 from utils.exporter import to_excel_bytes, to_gmc_xml
 from utils.validation import quality_summary, find_duplicates, validate_gtins, validate_images
@@ -68,19 +69,56 @@ def _cached_xml(fp: str, title: str, _df: pd.DataFrame) -> bytes:
 def _cached_xlsx(fp: str, sheet: str, _df: pd.DataFrame) -> bytes:
     return to_excel_bytes({sheet: _df})
 
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_export_status(fp: str, _df: pd.DataFrame):
+    """Conteggi livello export + drill-down sui mancanti, cache-ato su fingerprint.
+
+    Ritorna (pronti, arricchiti, grezzi, drill[(id, missing)]). Calcolato su
+    TUTTO il df (è la pagina export, l'utente vuole il quadro completo) ma
+    cache-ato su _df_fingerprint per non ricalcolare a ogni rerun.
+    """
+    status_df = add_export_status_columns(_df)
+    if status_df.empty:
+        return 0, 0, 0, []
+    levels = status_df["_export_level"]
+    pronti = int((levels == "pronto_export").sum())
+    arricchiti = int((levels == "arricchito").sum())
+    grezzi = int((levels == "grezzo").sum())
+    drill = []
+    for _, r in status_df.iterrows():
+        miss = r.get("_missing_fields") or []
+        if miss:
+            pid = str(r.get("id") or r.get("sku") or r.get("mpn") or "—")
+            drill.append((pid, list(miss)))
+    return pronti, arricchiti, grezzi, drill
+
 st.title("Catalog Optimizer · Google + Meta")
 st.caption("Genera feed ottimizzati con best practice per Google Merchant Center e Meta Catalog (Facebook/Instagram). "
            "Usa i campi ufficiali (`title`, `description`, `brand`, `color`, `size`, ecc.) generati dall'enrichment AI e normalizza availability/condition/price.")
 
+# Guard contesto: serve un cliente/feed attivo + un df in sessione.
+_act_client, _act_feed = state.get_active()
 df = current_df()
+if (not _act_client or not _act_feed) and df is None:
+    empty_state(
+        icon="🧭",
+        title="Nessun contesto attivo",
+        description="Scegli cliente e feed dalla pagina Clienti & Feed e portalo "
+                    "fino all'enrichment, poi torna qui per esportare.",
+        cta_label="Vai a Clienti & Feed →",
+        cta_page="client_pages/clienti.py",
+        cta_key="_export_no_ctx",
+    )
+    st.stop()
 if df is None:
     empty_state(
         icon="📦",
         title="Nessun feed caricato",
         description="Carica prima un feed prodotto. Il Catalog Optimizer userà enrichment + label "
                     "per produrre export Google Merchant e Meta Catalog.",
-        cta_label="Vai a Upload Feed →",
-        cta_page="client_pages/upload_feed.py",
+        cta_label="Vai a Clienti & Feed →",
+        cta_page="client_pages/clienti.py",
         cta_key="_empty_upload_opt",
     )
     st.stop()
@@ -146,6 +184,29 @@ with st.expander("🔎 Quality check catalogo (pre-export)", expanded=False):
                     } for i in issues]),
                     use_container_width=True, height=240,
                 )
+
+# ============================================================
+# PRONTI ALL'EXPORT — quadro stato per-prodotto (3 livelli)
+# ============================================================
+# Calcolato su tutto il df ma cache-ato su _df_fingerprint per non
+# ricalcolare a ogni rerun (interazioni innocue: radio, selectbox).
+_pronti, _arricchiti, _grezzi, _drill = _cached_export_status(_df_fingerprint(df), df)
+st.subheader("Pronti all'export")
+_pe = st.columns(3)
+_pe[0].metric("✅ Pronti export", f"{_pronti:,}")
+_pe[1].metric("✨ Arricchiti", f"{_arricchiti:,}")
+_pe[2].metric("🪨 Grezzi", f"{_grezzi:,}")
+if _drill:
+    with st.expander(f"Prodotti da completare ({len(_drill):,}) — campi mancanti",
+                     expanded=False):
+        for _pid, _miss in _drill[:500]:
+            st.markdown(f"**{_pid}** — {', '.join(_miss)}")
+        if len(_drill) > 500:
+            st.caption(f"… e altri {len(_drill) - 500:,} prodotti.")
+else:
+    st.success("Tutti i prodotti arricchiti hanno i campi obbligatori.", icon="✅")
+
+st.divider()
 
 # ============================================================
 # CONFIG

@@ -29,12 +29,18 @@ RELEVANT_INPUT_FIELDS = (
 )
 
 
-def _hash_row(row: dict, *, model: str, sector: str, provider: str) -> str:
+def _hash_row(row: dict, *, model: str, sector: str, provider: str,
+              target: str = "both", extra: str = "") -> str:
     """Hash stabile sul contenuto ORIGINALE quando disponibile.
 
     Se title_original / description_original esistono (set al primo
     enrichment come backup), usali per calcolare hash. Così re-run dello
     stesso prodotto già arricchito hitta la cache invece di pagare di nuovo.
+
+    `target` (google/meta/both) e `extra` (hash dello style_guide_text)
+    entrano nell'hash: output prodotti con target/style guide diversi NON
+    si servono a vicenda. Insieme al namespace per-cliente questo evita il
+    leak cross-cliente (P0.4).
     """
     payload = {}
     for k in RELEVANT_INPUT_FIELDS:
@@ -45,7 +51,7 @@ def _hash_row(row: dict, *, model: str, sector: str, provider: str) -> str:
         else:
             v = row.get(k, "")
         payload[k] = str(v or "").strip()
-    payload["_meta"] = f"{provider}|{model}|{sector}"
+    payload["_meta"] = f"{provider}|{model}|{sector}|{target}|{extra}"
     blob = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
     return hashlib.md5(blob).hexdigest()
 
@@ -85,7 +91,8 @@ def _append_cache(namespace: str, entry: dict) -> None:
 
 
 def get_cached(rows: pd.DataFrame, *, namespace: str = "default",
-               model: str = "", sector: str = "", provider: str = "") -> tuple[dict[int, dict], list[int]]:
+               model: str = "", sector: str = "", provider: str = "",
+               target: str = "both", extra: str = "") -> tuple[dict[int, dict], list[int]]:
     """Inspect which rows are already cached.
 
     Returns (cached_results, missing_indices):
@@ -96,7 +103,8 @@ def get_cached(rows: pd.DataFrame, *, namespace: str = "default",
     cached: dict[int, dict] = {}
     missing: list[int] = []
     for idx, row in rows.iterrows():
-        h = _hash_row(row.to_dict(), model=model, sector=sector, provider=provider)
+        h = _hash_row(row.to_dict(), model=model, sector=sector, provider=provider,
+                      target=target, extra=extra)
         if h in cache:
             cached[idx] = cache[h]["result"]
         else:
@@ -105,7 +113,8 @@ def get_cached(rows: pd.DataFrame, *, namespace: str = "default",
 
 
 def store(rows_with_results: Iterable[tuple[dict, dict]], *, namespace: str = "default",
-          model: str = "", sector: str = "", provider: str = "") -> int:
+          model: str = "", sector: str = "", provider: str = "",
+          target: str = "both", extra: str = "") -> int:
     """Persist enrichment results. Returns number of entries written.
 
     Args:
@@ -115,13 +124,15 @@ def store(rows_with_results: Iterable[tuple[dict, dict]], *, namespace: str = "d
     for row, result in rows_with_results:
         if not result:
             continue
-        h = _hash_row(row, model=model, sector=sector, provider=provider)
+        h = _hash_row(row, model=model, sector=sector, provider=provider,
+                      target=target, extra=extra)
         entry = {
             "hash": h,
             "result": result,
             "model": model,
             "sector": sector,
             "provider": provider,
+            "target": target,
         }
         _append_cache(namespace, entry)
         count += 1

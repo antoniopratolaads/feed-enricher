@@ -454,6 +454,58 @@ button[kind="primary"]:focus-visible {
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
 }
+/* Product card (grid selezione enrichment 2c) — riusa .preview-card */
+.product-card {
+    display: flex; flex-direction: column;
+    padding: 0; margin-bottom: 6px; overflow: hidden;
+    position: relative;
+}
+.product-card.is-selected {
+    border-color: var(--blue-500) !important;
+    background: var(--blue-50) !important;
+    box-shadow: 0 0 0 2px var(--blue-500), var(--shadow-md) !important;
+}
+.product-card .pc-imgwrap {
+    position: relative; width: 100%; aspect-ratio: 1 / 1;
+    background: var(--bg-subtle); overflow: hidden;
+}
+.product-card .pc-imgwrap img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    background: var(--bg-subtle);
+}
+.product-card .pc-noimg {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100%; height: 100%; color: var(--text-muted); gap: 4px;
+}
+.product-card .pc-noimg .pc-noimg-icon { font-size: 2rem; line-height: 1; }
+.product-card .pc-noimg .pc-noimg-txt { font-size: 0.72rem; }
+.product-card .pc-check {
+    position: absolute; top: 8px; right: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--blue-500); color: #FFFFFF;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+    box-shadow: 0 2px 6px rgba(47,111,237,0.35); z-index: 2;
+}
+.product-card .pc-body { padding: 10px 12px 12px; }
+.product-card .pc-title {
+    font-size: 0.82rem; font-weight: 600; color: var(--text-primary);
+    line-height: 1.35; margin: 6px 0 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.product-card .pc-brand { font-size: 0.74rem; color: var(--text-secondary); }
+.product-card .pc-price {
+    font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
+    font-family: 'Geist Mono', 'JetBrains Mono', monospace; margin-top: 2px;
+}
+.product-card .pc-price.pc-price-empty { color: var(--text-muted); }
+/* Sotto 768px riduce il font interno (le colonne Streamlit non si ricolonnano,
+   limite no-JS documentato in spec) */
+@media (max-width: 768px) {
+    .product-card .pc-title { font-size: 0.78rem; }
+}
+
 .step-done { border-left: 3px solid var(--success); }
 .step-pending { border-left: 3px solid var(--blue-500); }
 .step-todo { border-left: 3px solid var(--border-strong); opacity: 0.7; }
@@ -722,7 +774,14 @@ def api_key_banner():
 
 
 def render_sidebar_status():
-    """Compact status panel in sidebar: API key state + active project."""
+    """Compact status panel in sidebar: contesto attivo + stato AI.
+
+    Mostra il cliente/feed attivo (risolti da slug a nome via utils.clients),
+    quanti prodotti sono in sessione e quanti restano da arricchire (status
+    non in ok/cached), più il dot stato API key.
+    """
+    import html
+
     cfg = st.session_state.get("config", {}) or {}
     has_anthropic = bool(cfg.get("anthropic_api_key"))
     has_openai = bool(cfg.get("openai_api_key"))
@@ -730,21 +789,74 @@ def render_sidebar_status():
     api_status = "●  AI pronto" if (has_anthropic or has_openai) else "○  API key mancante"
     api_color = "#10B981" if (has_anthropic or has_openai) else "#EF4444"
 
-    df = st.session_state.get("feed_df")
-    n_products = len(df) if df is not None else 0
-    feed_line = (
-        f"<div style='color:#4B5563; font-size:0.78rem;'>"
-        f"<span style='color:#10B981;'>●</span>&nbsp;&nbsp;Feed: <b>{n_products:,}</b> prodotti</div>"
-        if n_products > 0
-        else "<div style='color:#9CA3AF; font-size:0.78rem;'>○&nbsp;&nbsp;Nessun feed caricato</div>"
-    )
+    # ── Contesto attivo (cliente + feed) ──────────────────────────────
+    # Import locale per evitare cicli di import (clients importa pandas/feed_diff,
+    # ui è importato molto presto da app.py).
+    from utils import state as _state
+    client_slug, feed_slug = _state.get_active()
+
+    if client_slug:
+        try:
+            from utils import clients as _cs
+            _cmeta = _cs.get_client(client_slug)
+            client_name = (_cmeta or {}).get("name") or client_slug
+            if feed_slug:
+                _fmeta = _cs.get_feed(client_slug, feed_slug)
+                feed_name = (_fmeta or {}).get("name") or feed_slug
+            else:
+                feed_name = None
+        except Exception:
+            client_name, feed_name = client_slug, feed_slug
+        ctx_html = (
+            f"<div style='color:#0A0A0F; font-weight:600; font-size:0.82rem; margin-bottom:2px;'>"
+            f"{html.escape(str(client_name))}</div>"
+        )
+        if feed_name:
+            ctx_html += (
+                f"<div style='color:#4B5563; font-size:0.74rem;'>feed: "
+                f"{html.escape(str(feed_name))}</div>"
+            )
+        else:
+            ctx_html += "<div style='color:#9CA3AF; font-size:0.74rem;'>nessun feed selezionato</div>"
+    else:
+        ctx_html = (
+            "<div style='color:#9CA3AF; font-weight:600; font-size:0.82rem;'>"
+            "Nessun cliente attivo</div>"
+        )
+
+    # ── Conteggi prodotti dal df in sessione ──────────────────────────
+    df = st.session_state.get("enriched_df")
+    if df is None:
+        df = st.session_state.get("feed_df")
+    if df is not None:
+        n_products = len(df)
+        if "_enrichment_status" in df.columns:
+            _st = df["_enrichment_status"].astype(str).str.strip().str.lower()
+            n_done = int(_st.isin(["ok", "cached"]).sum())
+        else:
+            n_done = 0
+        n_todo = n_products - n_done
+        feed_line = (
+            f"<div style='color:#4B5563; font-size:0.76rem; margin-top:6px;'>"
+            f"<span style='color:#10B981;'>●</span>&nbsp;&nbsp;<b>{n_products:,}</b> prodotti · "
+            f"<b>{n_todo:,}</b> da arricchire</div>"
+        )
+    else:
+        feed_line = (
+            "<div style='color:#9CA3AF; font-size:0.76rem; margin-top:6px;'>"
+            "○&nbsp;&nbsp;Nessun feed caricato</div>"
+        )
 
     st.markdown(
         f"""
         <div style='background:#F4F5F7; border:1px solid #E5E7EB; border-radius:10px;
                     padding:10px 12px; margin:6px 0 14px; font-size:0.78rem;'>
-            <div style='color:{api_color}; font-weight:600; margin-bottom:4px;'>{api_status}</div>
+            <div style='font-size:0.66rem; color:#9CA3AF; text-transform:uppercase;
+                        letter-spacing:0.06em; font-weight:600; margin-bottom:4px;'>Contesto attivo</div>
+            {ctx_html}
             {feed_line}
+            <div style='border-top:1px solid #E5E7EB; margin:8px 0 6px;'></div>
+            <div style='color:{api_color}; font-weight:600;'>{api_status}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1064,6 +1176,85 @@ def cost_projection_table(n_rows: int):
         "**Batch API** = invio async, risultati entro 24h, sconto 50% su tutto. "
         "Ideale per re-enrichment notturno cron di cataloghi interi."
     )
+
+
+# ============================================================
+# STATUS BADGE — palette stati enrichment (fonte unica, §3 spec)
+# ============================================================
+# Mapping `_enrichment_status` reale (ok/cached/error*/empty/stale/"")
+# → (etichetta UI, colore pieno, sfondo soft, icona). Coerente con la
+# tabella §3 della DESIGN_SPEC_FASE2: stesso linguaggio cromatico in
+# card, tabella, sidebar, metriche.
+_STATUS_STYLES = {
+    "grezzo":        ("Grezzo",        "#9CA3AF", "#F4F5F7", "○"),  # var(--text-muted)/var(--bg-subtle)
+    "arricchito":    ("Arricchito",    "#10B981", "#ECFDF5", "●"),  # var(--success)/var(--success-bg)
+    "errore":        ("Errore",        "#EF4444", "#FEF2F2", "✕"),  # var(--danger)/var(--danger-bg)
+    "rivedere":      ("Da rivedere",   "#F59E0B", "#FFFBEB", "!"),  # var(--warning)/var(--warning-bg)
+    "pronto_export": ("Pronto export", "#2F6FED", "#EEF4FF", "✓"),  # var(--blue-500)/var(--blue-50)
+}
+
+
+def _status_kind(status: str) -> str:
+    """Riduce il valore reale di `_enrichment_status` a una chiave di palette.
+
+    empty/"" → grezzo · ok → arricchito · error* → errore · cached/stale → rivedere.
+    """
+    s = str(status or "").strip().lower()
+    if s == "ok":
+        return "arricchito"
+    if s.startswith("error"):
+        return "errore"
+    if s in ("cached", "stale"):
+        return "rivedere"
+    # empty, "", nan, qualsiasi altro → mai arricchito
+    return "grezzo"
+
+
+def _render_status_span(key: str) -> str:
+    """Markup <span> soft condiviso, data una chiave di _STATUS_STYLES."""
+    label, color, bg, icon = _STATUS_STYLES[key]
+    return (
+        f"<span style='display:inline-flex; align-items:center; gap:4px; "
+        f"background:{bg}; color:{color}; font-size:0.7rem; font-weight:600; "
+        f"padding:2px 8px; border-radius:8px; line-height:1.4; white-space:nowrap;'>"
+        f"<span style='font-size:0.8em;'>{icon}</span>{label}</span>"
+    )
+
+
+def status_badge(status: str) -> str:
+    """Return an HTML <span> soft badge per lo stato enrichment dato.
+
+    Sfondo soft (`*-bg`), testo nel colore pieno (leggibile sul soft),
+    icona unicode + label. Usato nelle product card e ovunque serva il
+    badge stato coerente. Restituisce SEMPRE markup valido (default Grezzo).
+    Resta a 4 stati (asse `_enrichment_status`): non include pronto_export.
+    """
+    return _render_status_span(_status_kind(status))
+
+
+def export_status_badge(enrichment_status: str, level: str) -> str:
+    """Badge combinato: asse enrichment (errore/rivedere) + asse export (level).
+
+    Precedenza (§5 spec, dall'alto):
+      1. _enrichment_status inizia con 'error' → Errore
+      2. _enrichment_status ∈ {cached, stale}  → Da rivedere
+      3. level == 'pronto_export'              → Pronto export
+      4. level == 'arricchito'                 → Arricchito
+      5. else (grezzo/empty)                   → Grezzo
+    """
+    s = str(enrichment_status or "").strip().lower()
+    lvl = str(level or "").strip().lower()
+    if s.startswith("error"):
+        key = "errore"
+    elif s in ("cached", "stale"):
+        key = "rivedere"
+    elif lvl == "pronto_export":
+        key = "pronto_export"
+    elif lvl == "arricchito":
+        key = "arricchito"
+    else:
+        key = "grezzo"
+    return _render_status_span(key)
 
 
 # ============================================================

@@ -218,17 +218,62 @@ META_EXTRA = [
 ]
 
 
-def _normalize_availability(v: str) -> str:
+# Token canonici interni = enum Google valido (underscore).
+_GMC_AVAIL = {"in_stock", "out_of_stock", "preorder", "backorder"}
+
+
+def _canon_availability(v) -> str:
+    """Riduce qualsiasi input a un token canonico interno (underscore).
+
+    Output ∈ {in_stock, out_of_stock, preorder, backorder}. Ambiguo/vuoto →
+    out_of_stock (default conservativo: meglio non vendere che vendere sold-out).
+    """
     s = str(v).lower().strip()
-    if not s or s in ("nan", "none"):
-        return "out of stock"
-    if "in stock" in s or "in_stock" in s or s in ("yes", "available", "disponibile"):
-        return "in stock"
-    if "preorder" in s or "pre-order" in s or "pre_order" in s:
+    if not s or s in ("nan", "none", "null"):
+        return "out_of_stock"
+    norm = s.replace("-", "_").replace(" ", "_")
+    while "__" in norm:
+        norm = norm.replace("__", "_")
+    if norm in _GMC_AVAIL:
+        return norm
+    if "in_stock" in norm or norm in ("instock", "yes", "y", "si", "sì", "available",
+                                       "disponibile", "disp", "true", "1"):
+        return "in_stock"
+    if ("preorder" in norm or "pre_order" in norm or "prevendita" in norm
+            or "preordine" in norm):
         return "preorder"
-    if "backorder" in s:
+    if ("available_for_order" in norm or "backorder" in norm or "back_order" in norm
+            or "ordinazione" in norm or "riassort" in norm):
         return "backorder"
-    return "out of stock"
+    if "discontinued" in norm or "fuori_produzione" in norm or "cessato" in norm:
+        return "discontinued"  # token interno: Google→out_of_stock, Meta→discontinued
+    return "out_of_stock"
+
+
+def _normalize_availability_google(v) -> str:
+    """Enum Google (underscore): in_stock/out_of_stock/preorder/backorder."""
+    c = _canon_availability(v)
+    # Google non ha 'discontinued' → degrada a out_of_stock.
+    return c if c in _GMC_AVAIL else "out_of_stock"
+
+
+# Token canonico → enum Meta (con spazio). Meta non ha 'backorder'.
+_CANON_TO_META = {
+    "in_stock":     "in stock",
+    "out_of_stock": "out of stock",
+    "preorder":     "preorder",
+    "backorder":    "available for order",
+    "discontinued": "discontinued",
+}
+
+
+def _normalize_availability_meta(v) -> str:
+    """Enum Meta (spazio): 'in stock'/'out of stock'/'available for order'/'preorder'."""
+    return _CANON_TO_META[_canon_availability(v)]
+
+
+# Retrocompat: alcuni moduli/test importano ancora il vecchio nome.
+_normalize_availability = _normalize_availability_google
 
 
 def _normalize_condition(v: str) -> str:
@@ -394,7 +439,7 @@ def build_google_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
         out[target] = _coalesce_vec(df, sources) if sources else ""
 
     # normalizzazioni
-    out["availability"] = out["availability"].map(_normalize_availability)
+    out["availability"] = out["availability"].map(_normalize_availability_google)
     out["condition"] = out["condition"].map(_normalize_condition)
     out["price"] = out["price"].map(lambda v: _normalize_price(v, currency))
     out["sale_price"] = out["sale_price"].map(lambda v: _normalize_price(v, currency) if v else "")
@@ -429,7 +474,7 @@ def build_meta_feed(df: pd.DataFrame, currency: str = "EUR") -> pd.DataFrame:
         out[target] = _coalesce_vec(df, srcs)
 
     # Normalizzazioni (stessa logica di Google dove applicabile)
-    out["availability"] = out["availability"].map(_normalize_availability)
+    out["availability"] = out["availability"].map(_normalize_availability_meta)
     out["condition"] = out["condition"].map(_normalize_condition)
     out["price"] = out["price"].map(lambda v: _normalize_price(v, currency))
     if "sale_price" in out.columns:
@@ -499,3 +544,175 @@ def title_quality_check(df: pd.DataFrame, title_col: str = "title") -> pd.DataFr
         "all_caps": [titles.apply(lambda t: t.isupper() and len(t) > 5).sum()],
         "duplicates": [titles.duplicated().sum()],
     })
+
+
+# ============================================================
+# STATUS EXPORT PER-PRODOTTO (3 livelli: grezzo/arricchito/pronto_export)
+# ============================================================
+# Asse ORTOGONALE a `_enrichment_status` (esito chiamata AI). Qui calcoliamo
+# se un prodotto è "pronto per l'export GMC" verificando i required §3 spec.
+# La fonte di verità per gli enum availability/condition resta build_*_feed:
+# qui ri-normalizziamo on-the-fly così lo status è coerente anche su df grezzi.
+
+# Regex prezzo GMC valido: 'NNN.NN EUR' (valore + valuta ISO).
+_PRICE_RE = re.compile(r"^\d+(\.\d{1,2})?\s[A-Z]{3}$")
+_COND_ENUM = {"new", "refurbished", "used"}
+# Attributi AI: almeno uno popolato per considerare il prodotto "arricchito".
+_AI_ATTRS = [
+    "brand", "color", "size", "material", "pattern", "gender", "age_group",
+    "product_highlight", "product_detail", "product_type",
+]
+
+
+def _status_g(row, col: str) -> str:
+    """Safe-get da una riga (Series/dict): NaN/placeholder → '' senza crash."""
+    try:
+        if col not in row:
+            return ""
+    except TypeError:
+        return ""
+    v = row[col]
+    try:
+        if pd.isna(v):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    s = str(v).strip()
+    return "" if s.lower() in ("nan", "none", "null", "<na>") else s
+
+
+def _status_is_url(s: str, schemes: tuple[str, ...] = ("http://", "https://")) -> bool:
+    return s.startswith(schemes)
+
+
+def _category_valid(s: str) -> tuple[bool, bool]:
+    """(valida, sospetta) per google_product_category.
+
+    Valida se path con '>' o ID numerico; sospetta se single-token testuale.
+    """
+    if not s:
+        return (False, False)
+    if ">" in s or s.isdigit():
+        return (True, False)
+    return (True, True)
+
+
+def compute_export_status(row) -> tuple[str, bool, list[str]]:
+    """Calcola (level, export_ready, missing) per una riga prodotto.
+
+    - level ∈ {grezzo, arricchito, pronto_export}
+    - export_ready: True se nessun campo BLOCCA manca/è invalido
+    - missing: lista leggibile dei problemi (BLOCCA + AVVISA)
+
+    L'asse errore/da-rivedere resta su `_enrichment_status` (badge §5).
+    Tollera colonne assenti e NaN senza sollevare eccezioni.
+    """
+    from utils.validation import is_valid_gtin
+
+    missing: list[str] = []
+    status = _status_g(row, "_enrichment_status").lower()
+    title = _status_g(row, "title")
+    desc = _status_g(row, "description")
+    cat = _status_g(row, "google_product_category")
+    title_o = _status_g(row, "title_original")
+    desc_o = _status_g(row, "description_original")
+    cat_ok, cat_suspect = _category_valid(cat)
+
+    # Testo riscritto: title/desc presenti e diversi dagli originali (se noti).
+    text_rewritten = (
+        bool(title) and bool(desc)
+        and not (title == title_o and desc == desc_o and title_o != "")
+    )
+    is_arricchito = (
+        status in ("ok", "cached") and title and desc and cat_ok and cat
+        and any(_status_g(row, a) for a in _AI_ATTRS) and text_rewritten
+    )
+    if not is_arricchito:
+        return ("grezzo", False, [])
+
+    # --- da qui: prodotto ARRICCHITO, verifica required GMC §3 ---
+    blocking = 0
+    _id = _status_g(row, "id")
+    if not _id:
+        missing.append("id assente"); blocking += 1
+    elif len(_id) > 50:
+        missing.append("id troppo lungo (>50)"); blocking += 1
+    if not title:
+        missing.append("title assente"); blocking += 1
+    elif len(title) > 150:
+        missing.append("title >150 char"); blocking += 1
+    elif len(title) < 30:
+        missing.append("title troppo corto (<30)")  # AVVISA
+    if not desc:
+        missing.append("description assente"); blocking += 1
+    link = _status_g(row, "link")
+    if not link:
+        missing.append("link assente"); blocking += 1
+    elif not _status_is_url(link):
+        missing.append("link non valido (no http/https)"); blocking += 1
+    img = _status_g(row, "image_link")
+    if not img:
+        missing.append("image_link assente"); blocking += 1
+    elif not _status_is_url(img, ("https://",)):
+        missing.append("image_link non https"); blocking += 1
+    # availability: BLOCCA se assente (la normalizzazione per-target avviene
+    # comunque a valle, ma un valore mancante non deve passare per "pronto").
+    if not _status_g(row, "availability"):
+        missing.append("availability assente"); blocking += 1
+    # condition: _normalize_condition ritorna sempre un enum valido (default new),
+    # quindi BLOCCA solo se la colonna è del tutto assente.
+    if not _status_g(row, "condition"):
+        missing.append("condition assente"); blocking += 1
+    price = _status_g(row, "price")
+    if not price:
+        missing.append("price assente"); blocking += 1
+    elif not _PRICE_RE.match(price):
+        missing.append("price formato non valido"); blocking += 1
+    else:
+        try:
+            if float(price.split()[0]) <= 0:
+                missing.append("price = 0"); blocking += 1
+        except ValueError:
+            missing.append("price formato non valido"); blocking += 1
+    if not cat:
+        missing.append("google_product_category assente"); blocking += 1
+    elif cat_suspect:
+        missing.append("google_product_category path sospetto")  # AVVISA
+    if not _status_g(row, "brand"):
+        missing.append("brand assente"); blocking += 1
+    gtin = _status_g(row, "gtin")
+    mpn = _status_g(row, "mpn")
+    if not gtin and not mpn:
+        missing.append("identificatori assenti (gtin/mpn) — identifier_exists=no")  # AVVISA
+    elif gtin and not is_valid_gtin(gtin):
+        missing.append("gtin checksum non valido")  # AVVISA
+
+    export_ready = (blocking == 0)
+    return ("pronto_export" if export_ready else "arricchito", export_ready, missing)
+
+
+def add_export_status_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggiunge `_export_level`, `_export_ready` (bool) e `_missing_fields` (list).
+
+    Applica `compute_export_status` per riga. Non crasha su df vuoto o con
+    colonne mancanti: ritorna una copia con le colonne valorizzate.
+    """
+    out = df.copy()
+    if out.empty:
+        out["_export_level"] = pd.Series(dtype=object)
+        out["_export_ready"] = pd.Series(dtype=bool)
+        out["_missing_fields"] = pd.Series(dtype=object)
+        return out
+
+    levels: list[str] = []
+    ready: list[bool] = []
+    missing: list[list[str]] = []
+    for _, row in out.iterrows():
+        lvl, rdy, miss = compute_export_status(row)
+        levels.append(lvl)
+        ready.append(rdy)
+        missing.append(miss)
+    out["_export_level"] = levels
+    out["_export_ready"] = ready
+    out["_missing_fields"] = missing
+    return out

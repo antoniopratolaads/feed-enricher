@@ -9,8 +9,9 @@ import streamlit as st
 import pandas as pd
 from anthropic import Anthropic
 
+from utils import state
 from utils.state import init_state
-from utils.ui import apply_theme, api_key_banner, empty_state, guarded, diff_view
+from utils.ui import apply_theme, api_key_banner, empty_state, guarded, diff_view, stepper
 from utils.enrichment import refine_product, chat_about_data, DEFAULT_MODEL
 
 init_state()
@@ -18,10 +19,25 @@ apply_theme()
 api_key_banner()
 
 st.title("Refine & Chat")
+stepper(["Cliente & Sorgente", "Enrichment", "Refine", "Export"], 3)
 st.caption(
     "Affinamento post-enrichment. Applica istruzioni custom a sottoinsiemi o chiedi "
     "consigli a Claude con il contesto del catalogo."
 )
+
+# Guard contesto: serve un cliente/feed attivo + feed in sessione.
+_act_client, _act_feed = state.get_active()
+if (not _act_client or not _act_feed) and st.session_state.get("feed_df") is None:
+    empty_state(
+        icon="🧭",
+        title="Nessun contesto attivo",
+        description="Scegli prima cliente e feed (e caricalo) dalla pagina "
+                    "Clienti & Feed, poi passa per l'Enrichment AI.",
+        cta_label="Vai a Clienti & Feed →",
+        cta_page="client_pages/clienti.py",
+        cta_key="_refine_no_ctx",
+    )
+    st.stop()
 
 if not st.session_state.get("api_key"):
     empty_state(

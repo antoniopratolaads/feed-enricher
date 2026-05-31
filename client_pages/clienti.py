@@ -2,17 +2,46 @@
 import streamlit as st
 import pandas as pd
 
+from utils import state
 from utils.state import init_state
-from utils.ui import apply_theme, api_key_banner, empty_state
+from utils.ui import apply_theme, api_key_banner, empty_state, stepper
 from utils import clients as cs
 from utils import feed_diff
 from utils.feed_parser import load_feed, normalize_columns
+from utils.enrichment import list_sectors
+
+# Opzioni settore condivise tra form-creazione e pannello-dettaglio feed.
+# Etichette → valore salvato nel feed.json (""=generico, "auto"=per-prodotto).
+_SECTOR_GENERIC = "(generico)"
+_SECTOR_AUTO = "✨ auto (multi-settore)"
+
+
+def _sector_options() -> list[str]:
+    return [_SECTOR_GENERIC, _SECTOR_AUTO] + list_sectors()
+
+
+def _sector_to_value(choice: str) -> str:
+    if choice == _SECTOR_GENERIC:
+        return ""
+    if choice.startswith("✨ auto"):
+        return "auto"
+    return choice
+
+
+def _sector_to_index(value: str, options: list[str]) -> int:
+    """Indice del selectbox dato il valore salvato nel feed.json."""
+    if not value:
+        return options.index(_SECTOR_GENERIC)
+    if value == "auto":
+        return options.index(_SECTOR_AUTO)
+    return options.index(value) if value in options else options.index(_SECTOR_GENERIC)
 
 init_state()
 apply_theme()
 api_key_banner()
 
 st.title("Clienti & Feed")
+stepper(["Cliente & Sorgente", "Enrichment", "Refine", "Export"], 1)
 st.caption(
     "Ogni cliente può avere N feed. Ogni sync salva uno snapshot storico e "
     "calcola il delta vs ultimo snapshot: nuovi, modificati, rimossi. "
@@ -21,14 +50,29 @@ st.caption(
 
 # ============================================================
 # SELECTOR CLIENTE
+# Key page-scoped ("_clienti_client_sel") con valore = SLUG puro.
+# Il contesto attivo (cliente, feed) è gestito da utils.state.set_active.
 # ============================================================
 existing = cs.list_clients()
-opts = ["➕ Nuovo cliente..."] + [f"{c['name']}  ({c['slug']})" for c in existing]
-selected = st.selectbox("Cliente attivo", opts, index=1 if len(opts) > 1 else 0,
-                         key="_active_client_choice")
+_NEW_CLIENT = "➕ Nuovo cliente..."
+client_opts = [_NEW_CLIENT] + [c["slug"] for c in existing]
+_client_names = {c["slug"]: c["name"] for c in existing}
+
+# Default: cliente attivo se presente tra le opzioni, altrimenti il primo reale.
+_active_c, _active_f = state.get_active()
+if _active_c in client_opts:
+    _client_default_idx = client_opts.index(_active_c)
+else:
+    _client_default_idx = 1 if len(client_opts) > 1 else 0
+
+selected = st.selectbox(
+    "Cliente attivo", client_opts, index=_client_default_idx,
+    format_func=lambda s: s if s == _NEW_CLIENT else f"{_client_names.get(s, s)}  ({s})",
+    key="_clienti_client_sel",
+)
 
 current_slug: str | None = None
-if selected == "➕ Nuovo cliente...":
+if selected == _NEW_CLIENT:
     with st.form("_new_client_form"):
         new_name = st.text_input("Nome cliente", placeholder="Es. Nike IT, Rossi Auto, Oasi del Pulito")
         new_notes = st.text_area("Note (opz.)", placeholder="Descrizione cliente, referente, eccetera")
@@ -44,7 +88,7 @@ if selected == "➕ Nuovo cliente...":
                 st.error(str(e))
     st.stop()
 else:
-    current_slug = selected.split("(")[-1].strip(" )")
+    current_slug = selected  # ora è lo slug puro
     cs.touch_client(current_slug)
 
 client = cs.get_client(current_slug)
@@ -118,6 +162,19 @@ if st.session_state.get("_show_add_feed"):
             "- hash: sempre hash su title+brand+price"
         ),
     )
+    nf_sector_opts = _sector_options()
+    nf_sector_choice = st.selectbox(
+        "Settore best practice (enrichment)",
+        nf_sector_opts, index=0, key="_nf_sector",
+        help=(
+            "Ereditato dall'enrichment di questo feed: applica le regole "
+            "settoriali (formula titolo, tono, parole vietate).\n"
+            "- (generico): nessuna regola settoriale\n"
+            "- auto: detecta il settore per-prodotto\n"
+            "- uno specifico: forza quel settore"
+        ),
+    )
+    nf_sector = _sector_to_value(nf_sector_choice)
     nf_notes = st.text_area("Note (opz.)", key="_nf_notes")
 
     src_tab1, src_tab2 = st.tabs(["🌐 Da URL", "📁 Da file"])
@@ -131,13 +188,14 @@ if st.session_state.get("_show_add_feed"):
                        key="_nf_submit_url"):
             try:
                 slug = cs.create_feed(current_slug, nf_name, nf_url, "url",
-                                       nf_strategy, nf_notes)
+                                       nf_strategy, nf_notes, sector=nf_sector)
                 with st.spinner("Download feed..."):
                     raw = load_feed(nf_url)
                     parsed = normalize_columns(raw)
                     cs.save_snapshot(current_slug, slug, parsed)
                 st.session_state["_show_add_feed"] = False
-                st.session_state["_active_feed_choice"] = slug
+                st.session_state["_clienti_feed_sel"] = slug
+                state.set_active(current_slug, slug)
                 st.success(f"✅ Feed '{nf_name}' creato · {len(parsed)} prodotti caricati")
                 st.rerun()
             except (FileExistsError, ValueError, FileNotFoundError) as e:
@@ -159,7 +217,7 @@ if st.session_state.get("_show_add_feed"):
                        key="_nf_submit_file"):
             try:
                 slug = cs.create_feed(current_slug, nf_name, "", "upload",
-                                       nf_strategy, nf_notes)
+                                       nf_strategy, nf_notes, sector=nf_sector)
                 with st.spinner("Parsing file..."):
                     raw_bytes = nf_file.read()
                     if not raw_bytes:
@@ -169,7 +227,8 @@ if st.session_state.get("_show_add_feed"):
                         parsed = normalize_columns(raw)
                         cs.save_snapshot(current_slug, slug, parsed)
                         st.session_state["_show_add_feed"] = False
-                        st.session_state["_active_feed_choice"] = slug
+                        st.session_state["_clienti_feed_sel"] = slug
+                        state.set_active(current_slug, slug)
                         st.success(
                             f"✅ Feed '{nf_name}' creato · {len(parsed)} prodotti caricati"
                         )
@@ -217,21 +276,57 @@ st.divider()
 
 # ============================================================
 # DETTAGLIO FEED
+# Key page-scoped ("_clienti_feed_sel") con valore = SLUG puro.
+# La scelta cliente+feed diventa il contesto attivo via set_active.
 # ============================================================
 feed_slugs = [f["slug"] for f in feeds]
-active_feed = st.selectbox("Feed attivo", feed_slugs, key="_active_feed_choice")
+_feed_names = {f["slug"]: f["name"] for f in feeds}
+# Default: feed attivo se è di questo cliente ed esiste tra le opzioni.
+if _active_c == current_slug and _active_f in feed_slugs:
+    _feed_default_idx = feed_slugs.index(_active_f)
+else:
+    _feed_default_idx = 0
+active_feed = st.selectbox(
+    "Feed attivo", feed_slugs, index=_feed_default_idx,
+    format_func=lambda s: _feed_names.get(s, s),
+    key="_clienti_feed_sel",
+)
+# Promuovi la coppia (cliente, feed) scelta a contesto attivo. set_active è
+# no-op se invariato, quindi non resetta i df se l'utente non ha cambiato nulla.
+state.set_active(current_slug, active_feed)
+
 feed = cs.get_feed(current_slug, active_feed)
 if not feed:
     st.error("Feed non trovato.")
     st.stop()
 
 st.markdown(f"#### Feed: {feed['name']}")
-c = st.columns(4)
+c = st.columns(5)
 c[0].metric("Ultimo sync",
              (feed.get("last_sync_at") or "—")[:10])
 c[1].metric("Snapshot totali", feed.get("n_snapshots", 0))
 c[2].metric("Pending enrichment", feed.get("n_pending", 0))
 c[3].metric("Strategia ID", feed.get("id_strategy", "?"))
+# Settore corrente: "" → generico per la vista.
+_cur_sector = (feed.get("sector") or "").strip()
+c[4].metric("Settore", _cur_sector or "generico")
+
+# Editor settore feed: persistito via update_feed, è il DEFAULT proposto in
+# Enrichment AI (feed legacy senza campo sector → fallback "(generico)").
+fsec_opts = _sector_options()
+fsec_choice = st.selectbox(
+    "Settore best practice del feed",
+    fsec_opts, index=_sector_to_index(_cur_sector, fsec_opts),
+    key=f"_feed_sector_{active_feed}",
+    help="Ereditato come default dall'enrichment di questo feed. "
+         "Salva per renderlo persistente.",
+)
+fsec_value = _sector_to_value(fsec_choice)
+if fsec_value != _cur_sector:
+    if st.button("💾 Salva settore feed", key=f"_save_feed_sector_{active_feed}"):
+        cs.update_feed(current_slug, active_feed, sector=fsec_value)
+        st.toast("Settore feed aggiornato", icon="📚")
+        st.rerun()
 
 # ============================================================
 # SYNC (upload nuovo feed)
@@ -419,8 +514,9 @@ else:
                 # Mark all as selected in the df state
                 pending_df["_product_key"].tolist()
                 st.session_state["_enrich_selected_keys"] = pending_df["_product_key"].tolist()
-                st.session_state["_enrich_feed_slug"] = active_feed
-                st.session_state["_enrich_client_slug"] = current_slug
+                # Contesto già = (current_slug, active_feed): set_active no-op,
+                # non resetta i df. Riconfermato per chiarezza del handoff.
+                state.set_active(current_slug, active_feed)
                 st.switch_page("client_pages/enrichment_ai.py")
 
             if pcol2.button(f"Enrichment selezionati ({len(selected_rows)})",
@@ -429,8 +525,7 @@ else:
                 # Pass selected subset to Enrichment page via session state
                 sel_keys = selected_rows["_product_key"].tolist()
                 st.session_state["_enrich_selected_keys"] = sel_keys
-                st.session_state["_enrich_feed_slug"] = active_feed
-                st.session_state["_enrich_client_slug"] = current_slug
+                state.set_active(current_slug, active_feed)
                 # Load feed_df = snapshot subset
                 sel_rows = pending_df[pending_df["_product_key"].isin(sel_keys)]
                 st.session_state["feed_df"] = sel_rows.drop(

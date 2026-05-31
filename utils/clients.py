@@ -32,6 +32,10 @@ _LOCK = threading.Lock()
 BASE_DIR = Path.home() / ".feed_enricher" / "clients"
 BASE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Colonna chiave di prodotto usata per merge/upsert per identità (non per
+# indice pandas, che non è stabile dopo reload parquet).
+_PRODUCT_KEY_COL = "_product_key"
+
 
 # ============================================================
 # UTILITIES
@@ -192,12 +196,15 @@ def create_feed(
     source_type: str = "url",
     id_strategy: str = "hierarchical",
     notes: str = "",
+    sector: str = "",
 ) -> str:
     """Create a new feed under a client.
 
     Args:
         source_type: 'url' | 'upload' | 'shopify' | 'custom'
         id_strategy: 'hierarchical' (id → gtin → mpn → hash) | 'id' | 'gtin' | 'mpn'
+        sector: settore best-practice ereditato in enrichment ("" = generico,
+            "auto" = detect per-prodotto, oppure uno slug di list_sectors()).
     """
     if not get_client(client_slug):
         raise FileNotFoundError(f"Cliente '{client_slug}' non esiste")
@@ -214,6 +221,7 @@ def create_feed(
             "source_url": source_url.strip(),
             "source_type": source_type,
             "id_strategy": id_strategy,
+            "sector": (sector or "").strip(),
             "notes": notes.strip(),
             "created_at": _now(),
             "last_sync_at": None,
@@ -226,6 +234,7 @@ def create_feed(
 
 
 def update_feed(client_slug: str, feed_slug: str, **fields) -> None:
+    """Aggiorna i campi del feed.json (es. source_url, sector, id_strategy)."""
     path = _feed_dir(client_slug, feed_slug) / "feed.json"
     if not path.exists():
         raise FileNotFoundError(feed_slug)
@@ -386,9 +395,14 @@ def _count_pending(client_slug: str, feed_slug: str) -> int:
 # ENRICHED PERSISTENCE (cumulative)
 # ============================================================
 def save_enriched(client_slug: str, feed_slug: str, df: pd.DataFrame) -> Path:
-    """Persist the cumulative enriched dataframe (overwrites)."""
+    """Persist the cumulative enriched dataframe (overwrites).
+
+    Scrittura ATOMICA (P2.2): to_parquet su file .tmp poi rename, così un
+    crash a metà scrittura non lascia un enriched.parquet corrotto.
+    """
     d = _feed_dir(client_slug, feed_slug)
     path = d / "enriched.parquet"
+    tmp = d / "enriched.parquet.tmp"
     save_df = df.copy()
     for c in save_df.columns:
         try:
@@ -396,7 +410,8 @@ def save_enriched(client_slug: str, feed_slug: str, df: pd.DataFrame) -> Path:
         except (ValueError, TypeError):
             save_df[c] = save_df[c].astype(str)
     with _LOCK:
-        save_df.to_parquet(path, index=False)
+        save_df.to_parquet(tmp, index=False)
+        tmp.replace(path)  # rename atomico (sovrascrive il vecchio)
     return path
 
 
@@ -408,6 +423,149 @@ def load_enriched(client_slug: str, feed_slug: str) -> pd.DataFrame | None:
         return pd.read_parquet(path)
     except OSError:
         return None
+
+
+# ============================================================
+# MERGE / OVERLAY PER PRODUCT-KEY (verità: snapshot ↔ enriched)
+# ============================================================
+def _ensure_product_key(df: pd.DataFrame, strategy: str = "hierarchical") -> pd.DataFrame:
+    """Garantisce la colonna _product_key calcolata con feed_diff.product_key.
+
+    Scarta (key vuota) righe con identità non determinabile (key vuota o "h:"
+    puro): sopravvivono nel df ma con key vuota, e i caller le filtrano prima
+    dell'upsert. Funziona anche su parquet legacy senza _product_key.
+    """
+    from utils import feed_diff as _fd
+    out = df.copy()
+    keys = []
+    for _, row in out.iterrows():
+        k = _fd.product_key(row.to_dict(), strategy=strategy)
+        if not k or k == "h:":
+            k = ""
+        keys.append(k)
+    out[_PRODUCT_KEY_COL] = keys
+    return out
+
+
+def merge_enriched(client_slug: str, feed_slug: str, enriched_subset: pd.DataFrame,
+                   strategy: str = "hierarchical") -> pd.DataFrame:
+    """UPSERT del subset arricchito sulla base cumulativa, per _product_key.
+
+    Risolve P0.1 + P0.3: non sovrascrive enriched.parquet col solo subset
+    (perdendo gli altri prodotti) e non fa il merge per indice pandas (che si
+    rompe al reload parquet). Usa _product_key come identità stabile.
+
+    Flusso:
+        1. base = enriched.parquet esistente, altrimenti latest snapshot.
+        2. _product_key garantita su base e subset (strategy del feed).
+        3. UPSERT per key: aggiorna colonne esistenti, aggiunge colonne nuove,
+           inserisce righe di subset non presenti nella base.
+        4. salva con save_enriched (atomico) e ritorna il df mergeato completo.
+    """
+    with _LOCK:
+        base = load_enriched(client_slug, feed_slug)
+        if base is None or base.empty:
+            base = get_latest_snapshot(client_slug, feed_slug)
+        if base is None:
+            base = pd.DataFrame()
+
+    if not base.empty:
+        base = _ensure_product_key(base, strategy)
+    else:
+        base = pd.DataFrame(columns=[_PRODUCT_KEY_COL])
+
+    sub = _ensure_product_key(enriched_subset, strategy)
+    # scarta righe del subset senza identità: niente upsert sicuro
+    sub = sub[sub[_PRODUCT_KEY_COL].astype(str).str.len() > 0]
+
+    base = base.reset_index(drop=True)
+    key_to_pos: dict[str, int] = {}
+    base_keys = base[_PRODUCT_KEY_COL].astype(str).tolist() if _PRODUCT_KEY_COL in base.columns else []
+    for pos, k in enumerate(base_keys):
+        if k:
+            key_to_pos[k] = pos  # ultima occorrenza vince (robusto a dup legacy)
+
+    new_rows = []
+    for _, srow in sub.iterrows():
+        key = str(srow[_PRODUCT_KEY_COL])
+        pos = key_to_pos.get(key)
+        if pos is None:
+            new_rows.append(srow)  # prodotto non in base → riga nuova (append)
+            continue
+        for col, val in srow.items():  # upsert: aggiorna/aggiungi colonne
+            if col not in base.columns:
+                base[col] = ""
+            base.iat[pos, base.columns.get_loc(col)] = val
+
+    if new_rows:
+        new_df = pd.DataFrame(new_rows)
+        for col in new_df.columns:
+            if col not in base.columns:
+                base[col] = ""
+        base = pd.concat([base, new_df], ignore_index=True)
+
+    base = base.reset_index(drop=True)
+    save_enriched(client_slug, feed_slug, base)
+    return base
+
+
+def load_feed_merged(client_slug: str, feed_slug: str,
+                     strategy: str = "hierarchical") -> tuple[pd.DataFrame | None, str]:
+    """Carica il feed con overlay enriched→snapshot per _product_key (P0.2).
+
+    base = latest snapshot (verità corrente dei prodotti). Se esiste
+    enriched.parquet, sovrascrive sulla base — SOLO per le righe che matchano
+    per _product_key — le colonne arricchite + _enrichment_status.
+
+        * prodotti nello snapshot ma non in enriched → restano con
+          _enrichment_status vuoto (sono i "nuovi").
+        * prodotti in enriched ma non nello snapshot → NON inclusi (rimossi).
+
+    Se non c'è snapshot, fallback all'enriched puro. Ritorna (df, source).
+    """
+    snap = get_latest_snapshot(client_slug, feed_slug)
+    enr = load_enriched(client_slug, feed_slug)
+
+    if snap is None or snap.empty:
+        if enr is not None and not enr.empty:
+            return enr, "enriched"
+        return None, ""
+
+    base = _ensure_product_key(snap, strategy)
+    if "_enrichment_status" not in base.columns:
+        base["_enrichment_status"] = ""
+
+    if enr is None or enr.empty:
+        return base.reset_index(drop=True), "snapshot"
+
+    enr = _ensure_product_key(enr, strategy)
+    # colonne arricchite = quelle in enriched non presenti nella base snapshot
+    # PIÙ title/description (riscritte) e _enrichment_status.
+    base_cols = set(base.columns) - {_PRODUCT_KEY_COL}
+    overlay_cols = [c for c in enr.columns
+                    if c != _PRODUCT_KEY_COL and (c not in base_cols
+                       or c in ("title", "description", "_enrichment_status"))]
+
+    base = base.reset_index(drop=True)
+    enr_by_key: dict[str, pd.Series] = {}
+    for _, erow in enr.iterrows():
+        k = str(erow[_PRODUCT_KEY_COL])
+        if k:
+            enr_by_key[k] = erow
+
+    base_keys = base[_PRODUCT_KEY_COL].astype(str).tolist()
+    for pos, key in enumerate(base_keys):
+        erow = enr_by_key.get(key)
+        if erow is None:
+            continue
+        for col in overlay_cols:
+            if col not in base.columns:
+                base[col] = ""
+            val = erow.get(col)
+            if val is not None and str(val).strip().lower() not in ("", "nan", "none"):
+                base.iat[pos, base.columns.get_loc(col)] = val
+
+    return base.reset_index(drop=True), "merged"
 
 
 # ============================================================
