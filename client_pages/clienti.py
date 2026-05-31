@@ -8,6 +8,33 @@ from utils.ui import apply_theme, api_key_banner, empty_state, stepper
 from utils import clients as cs
 from utils import feed_diff
 from utils.feed_parser import load_feed, normalize_columns
+from utils.enrichment import list_sectors
+
+# Opzioni settore condivise tra form-creazione e pannello-dettaglio feed.
+# Etichette → valore salvato nel feed.json (""=generico, "auto"=per-prodotto).
+_SECTOR_GENERIC = "(generico)"
+_SECTOR_AUTO = "✨ auto (multi-settore)"
+
+
+def _sector_options() -> list[str]:
+    return [_SECTOR_GENERIC, _SECTOR_AUTO] + list_sectors()
+
+
+def _sector_to_value(choice: str) -> str:
+    if choice == _SECTOR_GENERIC:
+        return ""
+    if choice.startswith("✨ auto"):
+        return "auto"
+    return choice
+
+
+def _sector_to_index(value: str, options: list[str]) -> int:
+    """Indice del selectbox dato il valore salvato nel feed.json."""
+    if not value:
+        return options.index(_SECTOR_GENERIC)
+    if value == "auto":
+        return options.index(_SECTOR_AUTO)
+    return options.index(value) if value in options else options.index(_SECTOR_GENERIC)
 
 init_state()
 apply_theme()
@@ -135,6 +162,19 @@ if st.session_state.get("_show_add_feed"):
             "- hash: sempre hash su title+brand+price"
         ),
     )
+    nf_sector_opts = _sector_options()
+    nf_sector_choice = st.selectbox(
+        "Settore best practice (enrichment)",
+        nf_sector_opts, index=0, key="_nf_sector",
+        help=(
+            "Ereditato dall'enrichment di questo feed: applica le regole "
+            "settoriali (formula titolo, tono, parole vietate).\n"
+            "- (generico): nessuna regola settoriale\n"
+            "- auto: detecta il settore per-prodotto\n"
+            "- uno specifico: forza quel settore"
+        ),
+    )
+    nf_sector = _sector_to_value(nf_sector_choice)
     nf_notes = st.text_area("Note (opz.)", key="_nf_notes")
 
     src_tab1, src_tab2 = st.tabs(["🌐 Da URL", "📁 Da file"])
@@ -148,7 +188,7 @@ if st.session_state.get("_show_add_feed"):
                        key="_nf_submit_url"):
             try:
                 slug = cs.create_feed(current_slug, nf_name, nf_url, "url",
-                                       nf_strategy, nf_notes)
+                                       nf_strategy, nf_notes, sector=nf_sector)
                 with st.spinner("Download feed..."):
                     raw = load_feed(nf_url)
                     parsed = normalize_columns(raw)
@@ -177,7 +217,7 @@ if st.session_state.get("_show_add_feed"):
                        key="_nf_submit_file"):
             try:
                 slug = cs.create_feed(current_slug, nf_name, "", "upload",
-                                       nf_strategy, nf_notes)
+                                       nf_strategy, nf_notes, sector=nf_sector)
                 with st.spinner("Parsing file..."):
                     raw_bytes = nf_file.read()
                     if not raw_bytes:
@@ -261,12 +301,32 @@ if not feed:
     st.stop()
 
 st.markdown(f"#### Feed: {feed['name']}")
-c = st.columns(4)
+c = st.columns(5)
 c[0].metric("Ultimo sync",
              (feed.get("last_sync_at") or "—")[:10])
 c[1].metric("Snapshot totali", feed.get("n_snapshots", 0))
 c[2].metric("Pending enrichment", feed.get("n_pending", 0))
 c[3].metric("Strategia ID", feed.get("id_strategy", "?"))
+# Settore corrente: "" → generico per la vista.
+_cur_sector = (feed.get("sector") or "").strip()
+c[4].metric("Settore", _cur_sector or "generico")
+
+# Editor settore feed: persistito via update_feed, è il DEFAULT proposto in
+# Enrichment AI (feed legacy senza campo sector → fallback "(generico)").
+fsec_opts = _sector_options()
+fsec_choice = st.selectbox(
+    "Settore best practice del feed",
+    fsec_opts, index=_sector_to_index(_cur_sector, fsec_opts),
+    key=f"_feed_sector_{active_feed}",
+    help="Ereditato come default dall'enrichment di questo feed. "
+         "Salva per renderlo persistente.",
+)
+fsec_value = _sector_to_value(fsec_choice)
+if fsec_value != _cur_sector:
+    if st.button("💾 Salva settore feed", key=f"_save_feed_sector_{active_feed}"):
+        cs.update_feed(current_slug, active_feed, sector=fsec_value)
+        st.toast("Settore feed aggiornato", icon="📚")
+        st.rerun()
 
 # ============================================================
 # SYNC (upload nuovo feed)

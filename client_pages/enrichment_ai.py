@@ -641,32 +641,66 @@ else:
 selected_indices = [i for i in df.index if i in selected_row_ids]
 
 # ============================================================
-# CONFIGURAZIONE — sempre visibile (modello, settore, target)
+# CONFIGURAZIONE — sempre visibile (qualità, settore, target, riscrittura)
 # ============================================================
 st.markdown("### ⚙️ Configurazione enrichment")
 st.caption("Scelte che impattano costo e qualità output.")
 
-cfg1, cfg2, cfg3 = st.columns(3)
 # Solo modelli Anthropic: enrich_product chiama sempre l'API Anthropic, i
 # modelli OpenAI generavano solo errori.
 _ALL_MODELS = [
     "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
     "claude-haiku-3-5",
 ]
-model = cfg1.selectbox(
-    "🤖 Modello AI", _ALL_MODELS,
-    index=_ALL_MODELS.index("claude-sonnet-4-6"),
-    help="Sonnet 4.6 = sweet spot (€3-15/M tok). Haiku 4.5 = economico.",
-)
+# 3 livelli di qualità → model-id risolto. Il contratto launch/enrich_dataframe
+# riceve sempre il model-id stringa, non il livello (vedi `model` più sotto).
+_QUALITY_LEVELS = {
+    "Economico": "claude-haiku-4-5-20251001",
+    "Bilanciato": "claude-sonnet-4-6",
+    "Massima qualità": "claude-opus-4-6",
+}
+_QUALITY_COST = {"Economico": "$", "Bilanciato": "$$", "Massima qualità": "$$$"}
+
+cfg1, cfg2, cfg3 = st.columns(3)
+with cfg1:
+    quality = st.segmented_control(
+        "🎚️ Livello qualità", list(_QUALITY_LEVELS.keys()),
+        default="Bilanciato",
+        help="Economico = Haiku 4.5 ($). Bilanciato = Sonnet 4.6 ($$, sweet spot). "
+             "Massima qualità = Opus 4.6 ($$$).",
+    )
+    if quality is None:  # segmented_control può tornare None se deselezionato
+        quality = "Bilanciato"
+    st.caption(f"Costo relativo: **{_QUALITY_COST[quality]}**")
+# Settore ereditato dal feed attivo (2d.1): default = sector salvato nel
+# feed.json. Feed legacy senza campo sector → fallback "(generico)".
 sectors = ["(generico)", "✨ auto (multi-settore)"] + list_sectors()
-default_idx = sectors.index("abbigliamento") if "abbigliamento" in sectors else 0
+_active_c0, _active_f0 = state.get_active()
+_feed_sector = ""
+if _active_c0 and _active_f0:
+    _feed_sector = (_cs.get_feed(_active_c0, _active_f0) or {}).get("sector", "") or ""
+if not _feed_sector:
+    _default_sec_idx = 0  # "(generico)"
+elif _feed_sector == "auto":
+    _default_sec_idx = 1  # "✨ auto (multi-settore)"
+elif _feed_sector in sectors:
+    _default_sec_idx = sectors.index(_feed_sector)
+else:
+    _default_sec_idx = 0
 sector_choice = cfg2.selectbox(
-    "📚 Settore best practice", sectors, index=default_idx,
-    help="Applica regole settoriali dal YAML (formula titolo, tono, parole vietate). "
-         "'auto' = detecta per-prodotto.",
+    "📚 Settore best practice", sectors, index=_default_sec_idx,
+    help="Default ereditato dal feed attivo. Applica regole settoriali dal YAML "
+         "(formula titolo, tono, parole vietate). 'auto' = detecta per-prodotto.",
 )
 sector = "" if sector_choice == "(generico)" else \
          ("auto" if sector_choice.startswith("✨ auto") else sector_choice)
+# Salva l'override come settore del feed (persistito via update_feed).
+if _active_c0 and _active_f0 and sector != _feed_sector:
+    if cfg2.button("💾 Salva come settore del feed", key="_save_sector_feed",
+                    use_container_width=True):
+        _cs.update_feed(_active_c0, _active_f0, sector=sector)
+        st.toast("Settore del feed aggiornato", icon="📚")
+        st.rerun()
 target_choice = cfg3.radio(
     "🎯 Target", options=["both", "google", "meta"],
     format_func=lambda v: {"both": "🛒📘 Entrambi",
@@ -676,15 +710,30 @@ target_choice = cfg3.radio(
     help="Scegli se arricchire anche i campi Meta-only (risparmio ~15% se solo Google).",
 )
 
-# Avanzate (parallelismo, cache, style guide) — in expander
+# Riscrittura title/description — scelta esplicita visibile (2d.3). Gli
+# originali restano sempre salvati in title_original/description_original.
+_OW_REWRITE = "Riscrivi titoli e descrizioni"
+_OW_KEEP = "Mantieni testi esistenti, riempi solo i campi mancanti"
+overwrite_choice = st.radio(
+    "✍️ Testi prodotto", options=[_OW_REWRITE, _OW_KEEP], index=0,
+    help="'Riscrivi' rigenera titolo+descrizione (originali ripristinabili). "
+         "'Mantieni' tocca solo i campi vuoti.",
+)
+overwrite = overwrite_choice == _OW_REWRITE
+
+# Avanzate (parallelismo, cache, style guide, override modello) — in expander
 with st.expander("⚙️ Opzioni avanzate", expanded=False):
-    ac4, ac5, ac6 = st.columns(3)
+    ac4, ac6, ac7 = st.columns(3)
     workers = ac4.slider("Parallelismo", 1, 15, 5,
                           help="Chiamate API simultanee. 5 = sweet spot.")
-    overwrite = ac5.checkbox("Sovrascrivi title/description", value=True,
-                              help="Originali salvati in title_original/description_original.")
     use_cache = ac6.checkbox("Usa cache hash", value=True,
                                help="Riusa enrichment invariato (hash contenuto prodotto).")
+    # Override power-user: se impostato vince sul livello qualità (2d.2).
+    _model_override = ac7.selectbox(
+        "Modello specifico (override)", ["(usa livello)"] + _ALL_MODELS,
+        index=0,
+        help="Per power-user: forza un model-id preciso, ignorando il livello qualità.",
+    )
 
     from utils import catalog_style
     _style_ns = f"session_{st.session_state.get('session_id', 'default')}"
@@ -718,6 +767,13 @@ with st.expander("⚙️ Opzioni avanzate", expanded=False):
                 st.markdown(f"**Formula titolo**: `{s['title']['formula']}`")
             if forb := s.get("title", {}).get("forbidden_words"):
                 st.markdown(f"**Vietate**: {', '.join(forb)}")
+
+# Risoluzione finale del modello (2d.2): l'override power-user vince sul
+# livello qualità; il contratto a valle riceve sempre il model-id stringa.
+if _model_override != "(usa livello)":
+    model = _model_override
+else:
+    model = _QUALITY_LEVELS[quality]
 
 # ============================================================
 # CACHE + STIMA COSTO
@@ -764,6 +820,14 @@ if lc2.button("🧹 Pulisci cache", use_container_width=True,
     enrich_cache.clear(_cache_ns)
     st.toast("Cache pulita", icon="🧹")
     st.rerun()
+
+# Conferma dinamica dell'effetto sui testi prodotto (2d.3).
+if n_selected > 0:
+    if overwrite:
+        st.caption(f"Riscriverà titolo + descrizione di {n_selected:,} prodotti "
+                    "(originali ripristinabili).")
+    else:
+        st.caption("Manterrà i testi esistenti, popolerà solo i campi vuoti.")
 
 if launch:
     with guarded("enrichment AI"):

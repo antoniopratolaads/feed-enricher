@@ -196,12 +196,15 @@ def create_feed(
     source_type: str = "url",
     id_strategy: str = "hierarchical",
     notes: str = "",
+    sector: str = "",
 ) -> str:
     """Create a new feed under a client.
 
     Args:
         source_type: 'url' | 'upload' | 'shopify' | 'custom'
         id_strategy: 'hierarchical' (id → gtin → mpn → hash) | 'id' | 'gtin' | 'mpn'
+        sector: settore best-practice ereditato in enrichment ("" = generico,
+            "auto" = detect per-prodotto, oppure uno slug di list_sectors()).
     """
     if not get_client(client_slug):
         raise FileNotFoundError(f"Cliente '{client_slug}' non esiste")
@@ -218,6 +221,7 @@ def create_feed(
             "source_url": source_url.strip(),
             "source_type": source_type,
             "id_strategy": id_strategy,
+            "sector": (sector or "").strip(),
             "notes": notes.strip(),
             "created_at": _now(),
             "last_sync_at": None,
@@ -230,6 +234,7 @@ def create_feed(
 
 
 def update_feed(client_slug: str, feed_slug: str, **fields) -> None:
+    """Aggiorna i campi del feed.json (es. source_url, sector, id_strategy)."""
     path = _feed_dir(client_slug, feed_slug) / "feed.json"
     if not path.exists():
         raise FileNotFoundError(feed_slug)
