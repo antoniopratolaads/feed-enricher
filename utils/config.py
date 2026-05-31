@@ -8,11 +8,13 @@ CONFIG_DIR = Path.home() / ".feed_enricher"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULTS = {
-    "provider": "anthropic",          # anthropic | openai
+    "provider": "anthropic",          # anthropic | openai | gemini
     "anthropic_api_key": "",
     "anthropic_model": "claude-sonnet-4-6",
     "openai_api_key": "",
     "openai_model": "gpt-4o-mini",
+    "gemini_api_key": "",
+    "gemini_model": "gemini-2.5-flash",
     "max_tokens": 3500,
     "temperature": 0.3,
     "max_workers": 5,
@@ -32,6 +34,8 @@ def load_config() -> dict:
         cfg["anthropic_api_key"] = os.getenv("ANTHROPIC_API_KEY")
     if os.getenv("OPENAI_API_KEY"):
         cfg["openai_api_key"] = os.getenv("OPENAI_API_KEY")
+    if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        cfg["gemini_api_key"] = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     return cfg
 
 
@@ -80,5 +84,19 @@ def test_openai(api_key: str, model: str = "gpt-4o-mini") -> tuple[bool, str]:
             messages=[{"role": "user", "content": "Reply with just 'OK'"}],
         )
         return True, f"Risposta: {r.choices[0].message.content.strip()[:30]}"
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+def test_gemini(api_key: str, model: str = "gemini-2.5-flash") -> tuple[bool, str]:
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        r = client.models.generate_content(
+            model=model,
+            contents="Reply with just 'OK'",
+            config={"max_output_tokens": 20, "temperature": 0.0},
+        )
+        return True, f"Risposta: {(r.text or '').strip()[:30]}"
     except Exception as e:
         return False, str(e)[:200]

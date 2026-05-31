@@ -10,7 +10,10 @@ from utils.ui import (
     export_status_badge,
 )
 from utils.catalog_optimizer import compute_export_status
-from utils.enrichment import enrich_dataframe, list_sectors, load_sector
+from utils.enrichment import (
+    enrich_dataframe, list_sectors, load_sector, detect_provider,
+)
+from utils.config import load_config as _load_cfg_for_keys
 from utils import cache as enrich_cache
 from utils import clients as _cs
 
@@ -190,11 +193,18 @@ if st.session_state.get("feed_df") is None:
         cta_key="_empty_upload",
     )
     st.stop()
-if not st.session_state.get("api_key"):
+_cfg_keys = _load_cfg_for_keys()
+_has_any_key = bool(
+    st.session_state.get("api_key")
+    or _cfg_keys.get("anthropic_api_key")
+    or _cfg_keys.get("openai_api_key")
+    or _cfg_keys.get("gemini_api_key")
+)
+if not _has_any_key:
     empty_state(
         icon="🔑",
         title="API key non configurata",
-        description="L'enrichment AI richiede una chiave Claude. Configurala in Settings "
+        description="L'enrichment AI richiede una chiave Claude, OpenAI o Gemini. Configurala in Settings "
                     "(salvata in locale, non inviata ai server).",
         cta_label="Configura API key →",
         cta_page="client_pages/settings.py",
@@ -661,11 +671,16 @@ selected_indices = [i for i in df.index if i in selected_row_ids]
 st.markdown("### ⚙️ Configurazione enrichment")
 st.caption("Scelte che impattano costo e qualità output.")
 
-# Solo modelli Anthropic: enrich_product chiama sempre l'API Anthropic, i
-# modelli OpenAI generavano solo errori.
+# Multi-provider: ora che enrich_dataframe instrada davvero verso il provider
+# giusto (detect_provider + make_client in utils.enrichment), l'override modello
+# può puntare a QUALSIASI modello supportato — Anthropic, Gemini, OpenAI.
 _ALL_MODELS = [
     "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
     "claude-haiku-3-5",
+    "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+    "gpt-5", "gpt-5-mini", "gpt-5-nano",
+    "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini",
+    "o3", "o3-mini", "o4-mini",
 ]
 # 3 livelli di qualità → model-id risolto. Il contratto launch/enrich_dataframe
 # riceve sempre il model-id stringa, non il livello (vedi `model` più sotto).
@@ -794,6 +809,10 @@ else:
 # CACHE + STIMA COSTO
 # ============================================================
 n_selected = len(selected_indices)
+# Provider derivato dal modello scelto (3 livelli o override avanzato):
+# il namespace cache resta PER-CLIENTE (P0.4), il provider entra nella chiave
+# hash così Gemini/Anthropic/OpenAI non si contaminano a vicenda.
+active_provider = detect_provider(model)
 cached_rows: dict = {}
 n_hit = 0
 n_miss = n_selected
@@ -803,7 +822,7 @@ if n_selected > 0 and use_cache:
     try:
         cached_rows, _ = enrich_cache.get_cached(
             df.loc[selected_indices], namespace=_cache_ns,
-            model=model, sector=sector, provider="anthropic",
+            model=model, sector=sector, provider=active_provider,
             target=target_choice, extra=_style_extra,
         )
         n_hit = len(cached_rows)
@@ -851,14 +870,20 @@ if launch:
         with LoadingProgress("Enrichment AI in corso", total=n_miss or n_selected) as lp:
             def cb(d, t):
                 lp.update(d, subtitle=f"{d}/{t} prodotti processati")
+            _keys_map = {
+                "anthropic_api_key": _cfg_keys.get("anthropic_api_key") or st.session_state.get("api_key", ""),
+                "openai_api_key": _cfg_keys.get("openai_api_key", ""),
+                "gemini_api_key": _cfg_keys.get("gemini_api_key", ""),
+            }
             enriched_subset = enrich_dataframe(
-                selected_df, api_key=st.session_state["api_key"], model=model,
+                selected_df, api_key=_keys_map, model=model,
                 max_workers=workers, limit=None, progress_callback=cb,
                 sector=sector, overwrite_title_description=overwrite,
                 max_tokens=int(st.session_state.get("config", {}).get("max_tokens", 3500)),
                 style_guide_text=style_guide_text,
                 skip_already_enriched=False,
                 target=target_choice,
+                provider=active_provider,
             )
 
         if use_cache and "_enrichment_status" in enriched_subset.columns:
@@ -871,7 +896,7 @@ if launch:
                               if k not in ("_enrichment_status",) and pd.notna(row.get(k))}
                     pairs.append((src, result))
                 enrich_cache.store(pairs, namespace=_cache_ns,
-                                     model=model, sector=sector, provider="anthropic",
+                                     model=model, sector=sector, provider=active_provider,
                                      target=target_choice, extra=_style_extra)
             except Exception:
                 pass
